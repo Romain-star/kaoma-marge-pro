@@ -52,7 +52,19 @@ async function handleGet(request, env, url) {
   const user = await getUser(request, env);
   if (!user) return json({ error: 'non authentifié' }, 401);
   if (url.searchParams.get('me')) return json({ email: user.email, espaces: user.espaces.map((e) => ({ id: e, name: (ESPACES[e] && ESPACES[e].name) || e })), isAdmin: user.isAdmin });
-  if (url.searchParams.get('admin')) {
+  const adminParam = url.searchParams.get('admin');
+  if (adminParam === 'data') {
+    if (!user.isAdmin) return json({ error: 'réservé admin' }, 403);
+    if (!env.DOSSIERS) return json({}, 200);
+    const out = {};
+    for (const e of Object.keys(ESPACES)) {
+      const list = await env.DOSSIERS.list({ prefix: 'dossier:' + e + ':' });
+      const items = await Promise.all(list.keys.map(async (k) => { const v = await env.DOSSIERS.get(k.name); try { return JSON.parse(v); } catch { return null; } }));
+      out[e] = { name: ESPACES[e].name, users: Object.keys(user.cfg.acl).filter((m) => user.cfg.acl[m].indexOf(e) >= 0), dossiers: items.filter(Boolean) };
+    }
+    return json(out);
+  }
+  if (adminParam) {
     if (!user.isAdmin) return json({ error: 'réservé admin' }, 403);
     if (!env.DOSSIERS) return json([], 200);
     const out = [];

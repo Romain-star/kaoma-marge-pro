@@ -397,6 +397,27 @@
   .espace-menu .em-item:hover{background:#f3eeff;color:#6a3fe6}
   .espace-menu .em-item.danger{color:#c23b2e}
   .espace-menu .em-item.danger:hover{background:#fdeeec;color:#c23b2e}
+  /* Cockpit KAOMA (super-admin) */
+  .kaoma-overlay{position:fixed;inset:0;z-index:1100;display:none;align-items:flex-start;justify-content:center;background:rgba(30,25,15,.45);padding:32px 16px;overflow:auto}
+  .kaoma-panel{background:#f7f4ec;border:1px solid #e6ddcc;border-radius:20px;box-shadow:0 24px 60px rgba(60,50,30,.28);max-width:920px;width:100%;padding:22px 24px}
+  .kaoma-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+  .kaoma-title{font-family:'Inter Tight',sans-serif;font-weight:800;font-size:22px;color:#1a1a1f}
+  .kaoma-subt{color:#6b6b72;font-size:13px;margin-top:2px}
+  .kaoma-x{background:#fff;border:1px solid #e6ddcc;border-radius:9999px;width:32px;height:32px;cursor:pointer;color:#6b6b72;font-size:14px}
+  .kaoma-x:hover{border-color:#8052ff;color:#6a3fe6}
+  .k-load,.k-err{padding:40px;text-align:center;color:#6b6b72} .k-err{color:#c23b2e}
+  .k-total{display:flex;flex-wrap:wrap;gap:10px;background:#0f3b30;border-radius:16px;padding:16px 18px;margin-bottom:16px}
+  .k-total>div{flex:1;min-width:130px} .k-total span{display:block;color:#8fe8cf;font-size:11px;text-transform:uppercase;letter-spacing:.03em} .k-total b{display:block;color:#fff;font-family:'Inter Tight',sans-serif;font-weight:800;font-size:19px;margin-top:3px} .k-total .mg b{color:#4fe3aa}
+  .k-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+  .k-card{background:#fff;border:1px solid #e6ddcc;border-radius:16px;padding:16px}
+  .k-card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px}
+  .k-name{font-family:'Inter Tight',sans-serif;font-weight:800;font-size:16px;color:#1a1a1f}
+  .k-open{background:#8052ff;color:#fff;border:0;border-radius:9999px;padding:6px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap} .k-open:hover{background:#6a3fe6}
+  .k-metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .k-m{background:#faf7f0;border:1px solid #eee5d3;border-radius:11px;padding:9px 11px} .k-m span{display:block;color:#6b6b72;font-size:11px} .k-m b{display:block;font-family:'Inter Tight',sans-serif;font-weight:800;font-size:16px;color:#1a1a1f;margin-top:2px} .k-m.mg b{color:#0a8f5f}
+  .k-foot{margin-top:11px;color:#6b6b72;font-size:11px;word-break:break-word}
+  .k-import{margin-top:16px;padding-top:14px;border-top:1px solid #e6ddcc;font-size:12px;color:#6b6b72}
+  .k-import input{font-size:12px}
 </style>
 </head>
 <body>
@@ -412,6 +433,17 @@
     <div id="espacePicker" class="espace-picker"></div>
     <div id="authError" class="auth-error" style="display:none"></div>
     <button id="authLogout" class="auth-logout" style="display:none" onclick="authLogout()">Changer de compte</button>
+  </div>
+</div>
+
+<!-- Cockpit KAOMA (super-admin uniquement) -->
+<div id="kaomaOverlay" class="kaoma-overlay">
+  <div class="kaoma-panel">
+    <div class="kaoma-head">
+      <div><div class="kaoma-title">🏢 KAOMA — vos sociétés</div><div class="kaoma-subt">Vue d'ensemble des espaces connectés · réservé à toi</div></div>
+      <button class="kaoma-x" onclick="kaomaClose()">✕</button>
+    </div>
+    <div id="kaomaBody"></div>
   </div>
 </div>
 
@@ -1301,19 +1333,58 @@ function authRelogin(){ API_OK=false; authShow(true); $('authError').style.displ
 function authLogout(){ AUTH.idToken=AUTH.email=AUTH.espace=null; AUTH.espaces=[]; try{ localStorage.removeItem('kaoma_auth'); localStorage.removeItem('kaoma_espace'); }catch(e){} try{ google.accounts.id.disableAutoSelect(); }catch(e){} location.reload(); }
 async function adminEspaces(){
   if(!AUTH.isAdmin) return;
-  try{ const r=await fetch('/api/dossiers?admin=1',{headers:{'Authorization':'Bearer '+AUTH.idToken}});
-    if(!r.ok){ toast('Accès admin refusé'); return; }
-    const list=await r.json();
-    authShow(true); $('authSignin').style.display='none'; $('authError').style.display='none';
-    $('authSub').textContent='KAOMA — sociétés & espaces';
-    const p=$('espacePicker'); p.style.display='flex'; p.innerHTML='';
-    list.forEach(e=>{ const d=document.createElement('div'); d.className='espace-btn'; d.style.cursor='default';
-      d.innerHTML='<b>'+escapeHtml(e.name)+'</b> — '+e.dossiers+' dossier(s)<br><span style="font-size:11px;color:#6b6b72;font-weight:400">'+e.users.map(escapeHtml).join(', ')+'</span>'; p.appendChild(d); });
-    const imp=document.createElement('div'); imp.style.cssText='margin-top:12px;font-size:12px;color:#6b6b72;text-align:left';
-    imp.innerHTML='Importer un fichier JSON dans <b>Blomkål</b> :<br><input type="file" id="impFile" accept="application/json,.json" style="margin-top:6px;font-size:12px"> <button class="espace-btn" style="padding:8px 12px;margin-top:8px;width:auto;display:inline-block" onclick="importSeed(\'blomkal\')">Importer</button>';
-    p.appendChild(imp);
-    const back=document.createElement('button'); back.className='auth-logout'; back.textContent='← Retour à l\'app'; back.onclick=()=>{ authShow(false); }; p.appendChild(back);
-  }catch(e){ toast('Erreur'); }
+  const ov=$('kaomaOverlay'), body=$('kaomaBody'); if(!ov||!body) return;
+  ov.style.display='flex'; body.innerHTML='<div class="k-load">Chargement…</div>';
+  try{
+    const r=await fetch('/api/dossiers?admin=data',{headers:{'Authorization':'Bearer '+AUTH.idToken}});
+    if(!r.ok){ body.innerHTML='<div class="k-err">Accès refusé.</div>'; return; }
+    const data=await r.json(); const ids=Object.keys(data);
+    let TC=0,TPV=0,TM=0;
+    const cards=ids.map(id=>{
+      const e=data[id]||{}; const ds=e.dossiers||[];
+      let pv=0,marge=0,last='';
+      ds.forEach(d=>{ const t=computeDossierTotals(d); pv+=t.pv; marge+=t.marge; if((d.updated||'')>last) last=d.updated||''; });
+      TC+=ds.length; TPV+=pv; TM+=marge;
+      const taux=pv>0?marge/pv*100:0;
+      const lastTxt=last?new Date(last).toLocaleDateString('fr-FR'):'—';
+      const canOpen=AUTH.espaces.some(x=>x.id===id);
+      return '<div class="k-card">'
+        +'<div class="k-card-h"><span class="k-name">🏢 '+escapeHtml(e.name||id)+'</span>'+(canOpen?'<button class="k-open" onclick="kaomaOpen(\''+id+'\')">Ouvrir →</button>':'')+'</div>'
+        +'<div class="k-metrics">'
+          +'<div class="k-m"><span>Chiffrages</span><b>'+ds.length+'</b></div>'
+          +'<div class="k-m"><span>CA chiffré</span><b>'+EUR.format(Math.round(pv))+'</b></div>'
+          +'<div class="k-m mg"><span>Marge</span><b>'+EUR.format(Math.round(marge))+'</b></div>'
+          +'<div class="k-m"><span>Taux</span><b>'+taux.toFixed(1).replace('.',',')+' %</b></div>'
+        +'</div>'
+        +'<div class="k-foot">👥 '+((e.users||[]).map(escapeHtml).join(', ')||'—')+' · dernière activité '+lastTxt+'</div>'
+        +'</div>';
+    }).join('');
+    const totTaux=TPV>0?TM/TPV*100:0;
+    body.innerHTML='<div class="k-total">'
+        +'<div><span>Sociétés</span><b>'+ids.length+'</b></div>'
+        +'<div><span>Chiffrages</span><b>'+TC+'</b></div>'
+        +'<div><span>CA chiffré total</span><b>'+EUR.format(Math.round(TPV))+'</b></div>'
+        +'<div class="mg"><span>Marge totale</span><b>'+EUR.format(Math.round(TM))+' · '+totTaux.toFixed(1).replace('.',',')+'%</b></div>'
+      +'</div>'
+      +'<div class="k-grid">'+cards+'</div>'
+      +'<div class="k-import">📥 Importer des dossiers (JSON) dans <b>Blomkål</b> : <input type="file" id="impFile" accept="application/json,.json"> <button class="k-open" onclick="importSeed(\'blomkal\')">Importer</button></div>';
+  }catch(e){ body.innerHTML='<div class="k-err">Erreur de chargement.</div>'; }
+}
+function kaomaOpen(id){ kaomaClose(); if(AUTH.espaces.some(x=>x.id===id)) setEspace(id); }
+function kaomaClose(){ const o=$('kaomaOverlay'); if(o) o.style.display='none'; }
+function computeDossierTotals(d){
+  let cost=0, pvArt=0, hasPerLine=false;
+  (d.lines||[]).forEach(l=>{ if(l.qty!=null||l.marginMode){ hasPerLine=true; const r=computeLine(l); cost+=r.cost; pvArt+=r.pv; } else { cost+=parseNum(l.amount); } });
+  let moC=0, moPV=0;
+  const moArr=d.moLines||(d.mo?[{cout:d.mo.cout,hours:d.mo.hours,vente:d.mo.vente,marge:d.mo.marge}]:[]);
+  const mm=d.moMode||(d.mo?d.mo.mode:'vente')||'vente';
+  moArr.forEach(l=>{ const c=parseNum(l.cout)*parseNum(l.hours); moC+=c; let v; if(mm==='marge'){const m=parseNum(l.marge)/100; v=m<1?parseNum(l.cout)/(1-m):0;} else {v=parseNum(l.vente);} moPV+=v*parseNum(l.hours); });
+  const D=cost+moC;
+  let pv=0,marge=0,taux=0;
+  if(hasPerLine){ pv=pvArt+moPV; marge=pv-D; taux=pv>0?marge/pv:0; }
+  else if(d.mode==='A'){ const t=parseNum(d.targetA)/100; pv=t<1?D/(1-t):0; marge=pv-D; taux=t; }
+  else { pv=parseNum(d.pvB); marge=pv-D; taux=pv>0?marge/pv:0; }
+  return {cost:D, pv, marge, taux};
 }
 async function importSeed(esp){
   const f=$('impFile'); if(!f||!f.files||!f.files[0]){ toast('Choisis un fichier JSON'); return; }
