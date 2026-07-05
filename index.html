@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAOMA Marge — Calculateur de marge</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%231F2937'/%3E%3Ctext x='50' y='73' font-family='Arial,Helvetica,sans-serif' font-size='66' font-weight='800' fill='%23FAF6EC' text-anchor='middle'%3EK%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800&family=Inter:wght@400;500;600&family=Roboto+Slab:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* Dala CLAIR — fond crème chaleureux, accents Dala conservés */
+    --void:#f4efe4; --bone:#1a1a1f; --ash:#6b6b72; --silver:#8a8a90;
+    --iris:#8052ff; --iris-deep:#6a3fe6; --saffron:#ffb029; --verdant:#0a7a5f; --frost:#fbf9f4;
+    /* Sémantique app (mappée Dala clair) */
+    --graphite:#1a1a1f; --midnight:#1a1a1f; --paper:#f4efe4; --sage:#0a7a5f; --sage-deep:#0a7a5f;
+    --peach:#8052ff; --mint:#0a7a5f; --success:#0a8f5f; --warning:#9a6a00;
+    --danger:#c23b2e; --info:#6a3fe6;
+    --line:#e6ddcc; --card:#ffffff; --muted:#6b6b72; --text:#1a1a1f;
+    --shadow:0 6px 20px rgba(60,50,30,.08);
+    --shadow-btn:none;
+    --radius-card:20px; --radius-btn:24px; --radius-tag:9999px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--paper);color:var(--text);line-height:1.5;-webkit-font-smoothing:antialiased}
+  input::placeholder,textarea::placeholder{color:var(--steel)}
+  h1,h2,h3,h4{font-family:'Inter Tight',sans-serif;letter-spacing:-.02em}
+  .wrap{max-width:1120px;margin:0 auto;padding:36px 22px 96px}
+
+  /* Header */
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:6px 0 26px;border-bottom:1px solid var(--line);margin-bottom:34px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{width:40px;height:40px;border-radius:10px;background:var(--graphite);color:var(--paper);display:grid;place-items:center;font-family:'Inter Tight';font-weight:800;font-size:20px}
+  .brand h1{font-size:21px;font-weight:800}
+  .brand .sub{font-size:12px;color:var(--muted);font-weight:500}
+  .dossier-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .dossier-bar input{font-family:'Inter Tight';font-weight:600;font-size:15px;padding:9px 13px;border:1px solid var(--line);border-radius:9px;background:var(--card);min-width:200px;color:var(--graphite)}
+  .btn{font-family:'Inter';font-weight:600;font-size:13.5px;padding:10px 16px;border-radius:var(--radius-btn);border:1px solid var(--line);background:var(--card);color:var(--graphite);cursor:pointer;transition:.12s;display:inline-flex;align-items:center;gap:6px}
+  .btn:hover{border-color:var(--graphite)}
+  .btn.primary{background:var(--graphite);color:#fff;border-color:var(--graphite);box-shadow:var(--shadow-btn)}
+  .btn.primary:hover{background:#000}
+  .btn.ghost{background:transparent}
+  .btn.sm{padding:6px 11px;font-size:12.5px}
+  .btn.danger{color:var(--danger);border-color:#eccac4}
+  .btn.danger:hover{background:#fbeae7;border-color:var(--danger)}
+
+  /* Mode toggle */
+  .modebar{display:flex;background:#efe8e0;border-radius:13px;padding:5px;gap:5px;margin-bottom:24px;max-width:620px}
+  .modebar button{flex:1;border:0;background:transparent;font-family:'Inter Tight';font-weight:700;font-size:14.5px;color:var(--muted);padding:13px 12px;border-radius:9px;cursor:pointer;transition:.15s;display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1.25}
+  .modebar button small{font-family:'Inter';font-weight:500;font-size:11.5px;opacity:.75}
+  .modebar button.active{background:var(--card);color:var(--graphite);box-shadow:var(--shadow)}
+
+  .grid{display:grid;grid-template-columns:1fr;gap:32px;align-items:start}
+  #panel{order:-1} /* V2 : bloc Résultat + prix de vente remonté en 1er */
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-card);padding:30px 28px 32px;box-shadow:var(--shadow)}
+  .card h2{font-size:24px;font-weight:800;letter-spacing:-.03em;margin-bottom:6px;display:flex;align-items:center;gap:9px;color:var(--midnight)}
+  .card .hint{font-size:14px;color:var(--muted);margin-bottom:20px;line-height:1.45;max-width:60ch}
+  .eyebrow{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--sage)}
+
+  /* Cost table */
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:0 8px 8px}
+  th.r,td.r{text-align:right}
+  td{padding:4px 0}
+  .line-row td{padding:3px 4px}
+  .line-row input[type=text]{width:100%;border:1px solid transparent;border-radius:7px;padding:8px 9px;font-size:13.5px;background:transparent;font-family:'Inter'}
+  .line-row input[type=text]:hover{background:#faf7f3}
+  .line-row input[type=text]:focus{border-color:var(--line);background:#fff;outline:none}
+  .amt{width:118px;text-align:right;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13.5px;font-family:'Inter Tight';font-weight:600;background:#fff}
+  .amt:focus{outline:none;border-color:var(--sage)}
+  .tag{font-size:10.5px;font-weight:600;padding:3px 10px;border-radius:var(--radius-tag);background:#f0ece2;color:var(--muted);border:0;cursor:pointer;font-family:'Inter'}
+  .tag.interne{background:#e6efe0;color:var(--sage-deep)}
+  .tag.externe{background:#fbe6d6;color:var(--terracotta)}
+  .del{color:var(--muted);background:transparent;border:0;cursor:pointer;font-size:16px;line-height:1;padding:4px 6px;border-radius:6px}
+  .del:hover{color:var(--danger);background:#fbeae7}
+  .total-row td{border-top:2px solid var(--graphite);padding-top:12px;font-family:'Inter Tight';font-weight:800;font-size:16px}
+
+  .addline{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+
+  /* Right column / results */
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px}
+  .bigInput{width:100%;font-family:'Inter Tight';font-weight:800;font-size:26px;padding:12px 14px;border:1.5px solid var(--line);border-radius:11px;background:#fff;color:var(--graphite)}
+  .bigInput:focus{outline:none;border-color:var(--sage)}
+  .slider-wrap{display:flex;align-items:center;gap:14px}
+  input[type=range]{flex:1;accent-color:var(--sage)}
+  .pct{font-family:'Inter Tight';font-weight:800;font-size:24px;min-width:74px;text-align:right}
+
+  .result-hero{background:linear-gradient(135deg,var(--graphite),#2c3a4d);color:var(--paper);border-radius:14px;padding:20px;margin-bottom:16px}
+  .result-hero .lbl{font-size:12px;opacity:.75;font-weight:500;letter-spacing:.02em}
+  .result-hero .val{font-family:'Inter Tight';font-weight:800;font-size:36px;line-height:1.1;margin-top:2px}
+  .result-hero .val small{font-size:18px;opacity:.6}
+
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:8px}
+  .kpi{background:#faf7f3;border:1px solid var(--line);border-radius:11px;padding:13px 14px}
+  .kpi .lbl{font-size:11.5px;color:var(--muted);font-weight:500}
+  .kpi .val{font-family:'Inter Tight';font-weight:800;font-size:20px;margin-top:2px}
+  .kpi.good .val{color:var(--success)} .kpi.bad .val{color:var(--danger)} .kpi.warn .val{color:var(--warning)}
+
+  /* Decomposition bar */
+  .decomp{margin:18px 0 6px}
+  .decomp .bar{display:flex;height:38px;border-radius:9px;overflow:hidden;border:1px solid var(--line)}
+  .decomp .seg{display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;font-family:'Inter Tight';color:#fff;min-width:0;white-space:nowrap;overflow:hidden}
+  .seg.cost{background:var(--sage)} .seg.marge{background:var(--peach);color:var(--graphite)}
+  .decomp .leg{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:6px}
+
+  /* Pedago panel */
+  .pedago{background:#fff;border:1px dashed var(--sage);border-radius:14px;padding:18px 20px;margin-top:22px}
+  .pedago h3{font-size:14.5px;color:var(--sage-deep);display:flex;align-items:center;gap:7px;margin-bottom:12px}
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:560px){.compare{grid-template-columns:1fr}}
+  .cbox{border:1px solid var(--line);border-radius:11px;padding:14px}
+  .cbox.right{border-color:var(--success);background:#f3faf6}
+  .cbox.wrong{border-color:var(--danger);background:#fdf3f1}
+  .cbox .t{font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;margin-bottom:8px}
+  .cbox .formula{font-family:'Inter Tight';font-weight:700;font-size:13px;color:var(--graphite);background:rgba(0,0,0,.04);padding:6px 9px;border-radius:7px;display:inline-block;margin-bottom:10px}
+  .cbox .prow{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:var(--muted);padding:3px 0}
+  .cbox .prow b{font-family:'Inter Tight';font-weight:800;font-size:18px;color:var(--graphite)}
+  .cbox .verdict{margin-top:9px;font-family:'Inter Tight';font-weight:700;font-size:14px;padding:6px 10px;border-radius:8px;text-align:center}
+  .cbox .verdict.ok{background:#e2f3ea;color:var(--success)}
+  .cbox .verdict.ko{background:#f9e4e0;color:var(--danger)}
+  .pedago-intro{font-size:13px;color:var(--graphite);margin-bottom:14px}
+  .pedago-reverse{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}
+  .rev-title{font-size:13.5px;color:var(--sage-deep);margin-bottom:8px}
+  .revgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px}
+  @media(max-width:560px){.revgrid{grid-template-columns:1fr}}
+  .revbox{border:1px solid var(--line);border-radius:11px;padding:13px 14px;background:#f7faf8}
+  .revbox .rl{font-size:12px;color:var(--muted);font-weight:600}
+  .revbox .rf{font-family:'Inter Tight';font-weight:700;font-size:12.5px;background:rgba(0,0,0,.04);padding:4px 8px;border-radius:6px;display:inline-block;margin:6px 0}
+  .revbox .rv{font-family:'Inter Tight';font-weight:800;font-size:20px}
+  .rev-note{font-size:12px;color:var(--muted);margin-top:10px}
+  .verdict-line{margin-top:14px;font-family:'Inter Tight';font-weight:700;font-size:15px;padding:11px 14px;border-radius:10px;text-align:center}
+  .verdict-line.ok{background:#e2f3ea;color:var(--success)}
+  .verdict-line.ko{background:#f9e4e0;color:var(--danger)}
+  .verdict-line.neutral{background:#f0ece6;color:var(--muted)}
+  .trap{margin-top:14px;background:#fef6e7;border:1px solid #f0d99a;border-radius:10px;padding:12px 14px;font-size:12.5px;color:#7a5b08}
+  .trap b{color:var(--warning)}
+
+  /* Saved dossiers */
+  .saved{margin-top:22px}
+  .saved-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:11px;margin-top:12px}
+  .saved-item{border:1px solid var(--line);border-radius:11px;padding:13px 14px;background:#fff;cursor:pointer;transition:.12s}
+  .saved-item:hover{border-color:var(--graphite);box-shadow:var(--shadow)}
+  .saved-item .n{font-family:'Inter Tight';font-weight:700;font-size:14px;margin-bottom:3px}
+  .saved-item .m{font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;margin-top:6px}
+  .saved-item .pill{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:#e3efe3;color:var(--sage-deep)}
+  .saved-empty{color:var(--muted);font-size:13px;padding:8px 0}
+
+  .status{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--graphite);color:var(--paper);padding:11px 20px;border-radius:30px;font-size:13.5px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.25);transition:.25s;z-index:50}
+  .status.show{transform:translateX(-50%) translateY(0)}
+  .conn{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px}
+  .conn.shared{background:#e3efe3;color:var(--sage-deep)} .conn.local{background:#fdeee4;color:#a35a32}
+  .savest{font-size:12px;font-weight:600;white-space:nowrap}
+  .savest.ok{color:var(--success)} .savest.warn{color:var(--warning)} .savest.muted{color:var(--muted)}
+
+  /* Main-d'œuvre (MO) */
+  .mo{margin-top:18px;border-top:1px dashed var(--line);padding-top:16px}
+  .mo-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+  .mo-head h3{font-size:14.5px;font-weight:700;display:flex;align-items:center;gap:7px}
+  .mo-modes{display:flex;background:#efe8e0;border-radius:9px;padding:3px;gap:3px}
+  .mo-modes button{border:0;background:transparent;font-family:'Inter';font-weight:600;font-size:11.5px;color:var(--muted);padding:6px 10px;border-radius:7px;cursor:pointer}
+  .mo-modes button.active{background:#fff;color:var(--graphite);box-shadow:var(--shadow)}
+  .mo-hint{font-size:12px;color:var(--muted);margin-bottom:12px}
+  .mo-inputs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+  @media(max-width:560px){.mo-inputs{grid-template-columns:1fr 1fr}}
+  .mo-inputs label{display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin-bottom:4px}
+  .mo-inputs input{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px;font-family:'Inter Tight';font-weight:700;background:#fff}
+  .mo-inputs input:focus{outline:none;border-color:var(--sage)}
+  .mo-out{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+  @media(max-width:560px){.mo-out{grid-template-columns:1fr 1fr}}
+  .mo-cell{background:#faf7f3;border:1px solid var(--line);border-radius:10px;padding:10px 11px}
+  .mo-cell span{font-size:11px;color:var(--muted);font-weight:500;display:block}
+  .mo-cell b{font-family:'Inter Tight';font-weight:800;font-size:16px;display:block;margin-top:2px}
+  .mo-cell.hi{background:#eef6f0;border-color:#bfe0cc}
+  .mo-cell.hi b{color:var(--success)}
+  .mo-cell.good b{color:var(--success)} .mo-cell.bad b{color:var(--danger)}
+  .mo-table{width:100%;border-collapse:collapse;margin-bottom:8px}
+  .mo-table th{font-size:10.5px;padding:0 6px 6px}
+  .mo-table td{padding:3px 4px}
+  .molabel{width:100%;border:1px solid transparent;border-radius:7px;padding:7px 8px;font-size:13px;background:transparent;font-family:'Inter'}
+  .molabel:hover{background:#faf7f3}
+  .molabel:focus{border-color:var(--line);background:#fff;outline:none}
+  .moamt{width:72px;text-align:right;border:1px solid var(--line);border-radius:8px;padding:7px 8px;font-size:13px;font-family:'Inter Tight';font-weight:700;background:#fff}
+  .moamt:focus{outline:none;border-color:var(--sage)}
+  .momarge{font-family:'Inter Tight';font-weight:700;font-size:13px;color:var(--sage-deep);white-space:nowrap;text-align:right}
+  /* Articles ligne par ligne */
+  .lines-wrap{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:12px}
+  .lines-wrap table{min-width:1360px}
+  .lines-wrap th{padding:0 5px 5px}
+  /* En-têtes figés au défilement (sticky) */
+  .lines-wrap thead th{position:sticky;z-index:3;background:#f3ede6}
+  .lines-wrap thead tr.grp th{top:0;z-index:4;text-align:center;height:28px;line-height:28px;padding:0 8px;vertical-align:middle;font-size:10.5px;font-weight:700;color:var(--sage-deep);letter-spacing:.03em;text-transform:none}
+  .lines-wrap thead tr.det th{top:27px;border-bottom:1.5px solid var(--graphite);padding-top:6px;background:#f3ede6}
+  .lines-wrap thead th.gPose{background:#eaf3ee} .lines-wrap thead th.gFourn{background:#f6efe6}
+  .lines-wrap thead th.gTot{background:#e9eef5} .lines-wrap thead th.gMkt{background:#f2ecf3}
+  .lines-wrap thead th.gArt,.lines-wrap thead th.gEnd{background:#efe8e0}
+  .line-row td{padding:3px 3px}
+  .pvu{font-size:12px;color:var(--muted)}
+  .mktrange{font-size:10px;color:var(--muted);white-space:nowrap;margin-top:2px}
+  .mo-cell.muted b{color:var(--muted)}
+  .mgstep{width:16px;height:24px;border:1px solid var(--line);background:#faf7f3;border-radius:5px;cursor:pointer;font-weight:700;color:var(--sage-deep);font-size:13px;line-height:1;padding:0;flex:0 0 auto}
+  .mgstep:hover{border-color:var(--sage);background:#fff}
+  .line-row td:first-child input{min-width:150px}
+  .line-row td, tr.grp th, thead tr:nth-child(2) th{white-space:nowrap}
+  .lin{width:52px;text-align:right;border:1px solid var(--line);border-radius:7px;padding:6px 6px;font-size:12.5px;font-family:'Inter Tight';font-weight:700;background:#fff}
+  .lin:focus{outline:none;border-color:var(--sage)}
+  .lin.pu{width:74px}
+  .mgtoggle{font-size:11px;font-weight:700;border:1px solid var(--line);background:#faf7f3;border-radius:6px;padding:6px 6px;cursor:pointer;color:var(--sage-deep);min-width:24px}
+  .mgtoggle:hover{border-color:var(--sage)}
+  .lcell{font-family:'Inter Tight';font-weight:700;font-size:13px;white-space:nowrap;text-align:right}
+  .lcell.pv{color:var(--graphite)} .lcell.mg{color:var(--sage-deep)}
+  .mgwrap{display:inline-flex;gap:4px;align-items:center;justify-content:flex-end}
+  .sepL{border-left:2px solid var(--line)}
+  tr.grp th{font-size:10px;letter-spacing:.06em;color:var(--sage-deep);padding:0 8px 4px;text-align:left}
+  .split-line{font-size:12px;color:var(--muted);margin-top:8px}
+  .split-line b{color:var(--graphite)}
+
+  /* Estimateur pose + repère communs */
+  .repere-head{font-family:'Inter Tight';font-weight:700;font-size:13px;color:var(--graphite);margin:18px 0 8px;display:flex;align-items:center;gap:7px}
+  .poseEst,.communs{margin-top:16px;border:1px dashed var(--sage);border-radius:12px;padding:14px 16px;background:#fbfaf8}
+  .poseEst-h,.communs-h{font-family:'Inter Tight';font-weight:700;font-size:13.5px;color:var(--sage-deep);margin-bottom:10px;display:flex;align-items:center;gap:7px}
+  .poseEst-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-items:end}
+  @media(max-width:560px){.poseEst-grid{grid-template-columns:1fr 1fr}}
+  .poseEst-grid label{font-size:11px;color:var(--muted);font-weight:600;display:flex;flex-direction:column;gap:4px}
+  .poseEst-grid input{border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:15px;font-family:'Inter Tight';font-weight:700;background:#fff}
+  .poseEst-grid input:focus{outline:none;border-color:var(--sage)}
+  .poseEst-out{background:#eef6f0;border:1px solid #bfe0cc;border-radius:9px;padding:9px 11px}
+  .poseEst-out span{font-size:11px;color:var(--muted);font-weight:500;display:block}
+  .poseEst-out b{font-family:'Inter Tight';font-weight:800;font-size:17px;display:block;margin-top:2px;color:var(--sage-deep)}
+  .poseEst-note,.communs-note{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.45}
+  .communs-intro{font-size:12.5px;color:var(--graphite);margin-bottom:12px;line-height:1.5}
+  .communs-inputs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+  @media(max-width:560px){.communs-inputs{grid-template-columns:1fr}}
+  .communs-inputs label{font-size:11px;color:var(--muted);font-weight:600;display:flex;flex-direction:column;gap:4px}
+  .communs-inputs input{border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:14px;font-family:'Inter Tight';font-weight:700;background:#fff}
+  .communs-inputs input:focus{outline:none;border-color:var(--sage)}
+  .communs-verdict{margin-top:12px;font-family:'Inter Tight';font-weight:700;font-size:13.5px;padding:10px 13px;border-radius:9px;text-align:center}
+  .communs-verdict.ok{background:#e2f3ea;color:var(--success)}
+  .communs-verdict.ko{background:#fef6e7;color:#7a5b08}
+  .communs-verdict.neutral{background:#f0ece6;color:var(--muted)}
+
+  /* ===== V2 — Sélecteur type de chiffrage + rangement ===== */
+  .chibar{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:20px}
+  .chibar button{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:11px 16px;font-family:'Inter Tight';font-weight:700;font-size:14px;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;gap:2px;line-height:1.2;transition:.12s;text-align:left}
+  .chibar button small{font-family:'Inter';font-weight:500;font-size:11px;color:var(--muted);opacity:.8}
+  .chibar button.active{border-color:var(--graphite);color:var(--graphite);background:#fff;box-shadow:var(--shadow)}
+  .chibar button.active small{color:var(--sage-deep);opacity:1}
+  /* Gating par mode (classe sur body) */
+  .simple-only{display:none}
+  body.chi-simple .simple-only{display:block}
+  body.chi-simple .detail-only{display:none}
+  body.chi-simple .adv-wrap{display:none}
+  /* Bloc résultat clair (PDR · PDV · Marge) */
+  .result3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:2px 0 4px}
+  @media(max-width:560px){.result3{grid-template-columns:1fr}}
+  .rcard{border-radius:14px;padding:15px 17px;border:1px solid var(--line);background:#faf7f3}
+  .rcard .rl{font-size:11.5px;color:var(--muted);font-weight:600;letter-spacing:.02em}
+  .rcard .rv{font-family:'Inter Tight';font-weight:800;font-size:27px;margin-top:3px;line-height:1.05}
+  .rcard.pdv{background:linear-gradient(135deg,var(--graphite),#2c3a4d);border-color:var(--graphite)}
+  .rcard.pdv .rl{color:rgba(255,255,255,.72)} .rcard.pdv .rv{color:#fff}
+  .rcard.marge{background:#eef6f0;border-color:#bfe0cc} .rcard.marge .rv{color:var(--success)}
+  .rcard.marge .sub{font-family:'Inter Tight';font-weight:700;font-size:13px;color:var(--sage-deep);margin-top:1px}
+  /* PDV éditable directement dans la case résultat (une seule saisie) */
+  .rcard.pdv .rv-edit{width:100%;background:transparent;border:0;border-bottom:1.5px solid rgba(255,255,255,.35);color:#fff;font-family:'Inter Tight';font-weight:800;font-size:26px;padding:2px 0 4px;outline:none;border-radius:0}
+  .rcard.pdv .rv-edit::placeholder{color:rgba(255,255,255,.55);font-weight:600;font-size:16px}
+  .rcard.pdv .rv-edit:focus{border-bottom-color:#fff}
+  /* Sections repliables (Analyse avancée, Comprendre la marge) + toggle colonnes — style unifié, visible */
+  details.adv-wrap,details.pedago-wrap{margin-top:22px;border:1px solid var(--line);border-radius:var(--radius-card);background:var(--card);overflow:hidden;box-shadow:var(--shadow)}
+  details.adv-wrap>summary,details.pedago-wrap>summary{cursor:pointer;list-style:none;font-family:'Inter Tight';font-weight:700;font-size:15px;color:var(--graphite);display:flex;align-items:center;gap:10px;padding:16px 20px;transition:.12s}
+  details.adv-wrap>summary::-webkit-details-marker,details.pedago-wrap>summary::-webkit-details-marker{display:none}
+  details.adv-wrap>summary:hover,details.pedago-wrap>summary:hover{background:var(--frost)}
+  details.adv-wrap>summary::after,details.pedago-wrap>summary::after{content:'⌄';margin-left:auto;font-size:19px;line-height:1;color:var(--muted);transition:.25s}
+  details.adv-wrap[open]>summary::after,details.pedago-wrap[open]>summary::after{transform:rotate(-180deg)}
+  details.adv-wrap[open]>summary,details.pedago-wrap[open]>summary{border-bottom:1px solid var(--line)}
+  details.adv-wrap .adv-body{padding:14px 20px 20px}
+  details.pedago-wrap>summary{color:var(--sage-deep)}
+  details.pedago-wrap .pedago{border:0;border-radius:0;margin-top:0;box-shadow:none;padding:18px 20px 20px}
+  #colToggle{border:1px solid var(--line);border-radius:var(--radius-tag);background:var(--card);padding:9px 16px;font-weight:600;color:var(--graphite);box-shadow:var(--shadow)}
+  #colToggle:hover{border-color:var(--graphite);background:var(--frost)}
+  /* Coût par ligne + réel vs estimé */
+  .lcell.cost{color:var(--sage-deep);font-weight:700}
+  .lines-wrap thead th.gcost{background:#e8efe8;color:var(--sage-deep)}
+  .rlegend{font-size:11.5px;color:var(--muted);margin:10px 0 2px;display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+  .rlegend b{color:var(--graphite)}
+  .kpi.est{background:#fef6e7;border-color:#f0d99a}
+  .kpi.est .lbl{color:#7a5b08}
+  .kpi.est .val{color:var(--warning)}
+  .kpi.est .lbl::after{content:' · estimé';font-size:9.5px;font-weight:700;opacity:.85}
+  /* Tableau — vue « essentiel » (pose & marché repliés pour l'essentiel en un coup d'œil) */
+  .colbar{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:8px}
+  .lines-wrap.ess .colPose,.lines-wrap.ess thead th.gPose,.lines-wrap.ess .colMkt,.lines-wrap.ess thead th.gMkt{display:none}
+  .lines-wrap.ess table{min-width:0;width:100%}
+  .lines-wrap.ess tbody td{width:1%;white-space:nowrap}
+  .lines-wrap.ess tbody td:first-child{width:auto}
+  .lines-wrap.ess tbody td:first-child input{width:100%;min-width:160px}
+
+  /* ================= DALA CLAIR — fond crème + cases couleur (accents conservés) ================= */
+  body{background:var(--paper);color:var(--text)}
+  .brand .sub{color:var(--ash)}
+  .logo{background:#1F2937;color:#faf5e8;border:0} /* logo original préservé */
+  header{border-bottom-color:var(--line)}
+  .amt,.lin,.bigInput,.moamt,.mo-inputs input,.poseEst-grid input,.communs-inputs input,.dossier-bar input,.line-row input[type=text]{background:#fbf9f4;color:var(--text);border-color:#e2d8c6}
+  .line-row input[type=text]:hover{background:#f6f1e8}
+  .line-row input[type=text]:focus,.amt:focus,.lin:focus,.bigInput:focus,.dossier-bar input:focus{background:#fff;border-color:var(--iris);outline:none}
+  input::placeholder,textarea::placeholder{color:#a79f8f}
+  .btn{background:#fff;color:var(--text);border-color:#e2d8c6}
+  .btn:hover{border-color:var(--iris)}
+  .btn.primary{background:var(--iris);color:#fff;border-color:var(--iris)}
+  .btn.primary:hover{background:var(--iris-deep)}
+  .btn.ghost{background:transparent}
+  .btn.danger{color:var(--danger);border-color:#e6b8b2} .btn.danger:hover{background:#fdeeec;border-color:var(--danger)}
+  .card{background:var(--card);border-color:var(--line)}
+  .card h2,.repere-head{color:var(--text)}
+  .chibar button{background:#fff;color:var(--muted);border-color:var(--line)}
+  .chibar button.active{background:#f3eeff;color:var(--iris-deep);border-color:var(--iris)} .chibar button.active small{color:var(--iris-deep)}
+  .chibar button small{color:var(--muted)}
+  .modebar{background:#efe8dd} .modebar button{color:var(--muted)} .modebar button.active{background:#fff;color:var(--text)}
+  .rcard{background:#faf7f0;border-color:var(--line)} .rcard .rl{color:var(--muted)} .rcard.pdr .rv{color:var(--text)}
+  .rcard.pdv{background:var(--iris);border-color:var(--iris)} .rcard.pdv .rl{color:rgba(255,255,255,.85)} .rcard.pdv .rv{color:#fff} .rcard.pdv .rv-edit{color:#fff;border-bottom-color:rgba(255,255,255,.55)} .rcard.pdv .rv-edit::placeholder{color:rgba(255,255,255,.7)}
+  .rcard.marge{background:#0f3b30;border-color:#0f3b30} .rcard.marge .rl{color:rgba(255,255,255,.8)} .rcard.marge .rv{color:#4fe3aa} .rcard.marge .sub{color:#8fe8cf}
+  .rlegend,.rlegend b{color:var(--muted)}
+  .result-hero{background:linear-gradient(135deg,var(--iris),var(--iris-deep));border:0} .result-hero .lbl{color:rgba(255,255,255,.8)} .result-hero .val{color:#fff}
+  .kpi{background:#faf7f0;border-color:var(--line)} .kpi .lbl{color:var(--muted)} .kpi .val{color:var(--text)}
+  .kpi.good .val{color:var(--success)} .kpi.bad .val{color:var(--danger)} .kpi.warn .val{color:var(--warning)}
+  .kpi.est{background:#fdf1dc;border-color:#f0dcae} .kpi.est .lbl{color:#9a6a00} .kpi.est .val{color:#9a6a00}
+  .pct{color:var(--text)} input[type=range]{accent-color:var(--iris)}
+  .decomp .bar{border-color:var(--line)} .seg.cost{background:#15846e;color:#fff} .seg.marge{background:var(--iris);color:#fff}
+  .decomp .leg,.split-line{color:var(--muted)} .split-line b{color:var(--text)}
+  table,th,td{color:var(--text)}
+  .lines-wrap{border-color:var(--line)}
+  .lines-wrap thead th{background:#f3ecdf;color:#6b6b72}
+  .lines-wrap thead th.gArt,.lines-wrap thead th.gEnd{background:#f0e9db}
+  .lines-wrap thead th.gPose{background:#e9f3ee} .lines-wrap thead th.gFourn{background:#f6efe6}
+  .lines-wrap thead th.gTot{background:#eef1f6} .lines-wrap thead th.gMkt{background:#f1ecf5}
+  .lines-wrap thead th.gcost{background:#e9f3ee;color:var(--verdant)}
+  .lines-wrap thead tr.det th{border-bottom-color:#c9bfa8}
+  .lcell.pv{color:var(--text)} .lcell.cost{color:var(--verdant)} .lcell.mg{color:var(--iris-deep)}
+  .sepL{border-left-color:var(--line)} tr.grp th{color:var(--verdant)} .pvu,.mktrange{color:var(--muted)}
+  .mgstep,.mgtoggle{background:#eef7f2;color:var(--verdant);border-color:#cfe7dd} .mgstep:hover,.mgtoggle:hover{background:#e2f3ec;border-color:var(--iris)}
+  .tag{background:#efe9dd;color:#6b6b72} .tag.interne{background:#e3f3ea;color:var(--verdant)} .tag.externe{background:#fdf1dc;color:#9a6a00}
+  .del{color:var(--muted)} .del:hover{color:var(--danger);background:#fdeeec}
+  .total-row td{border-top-color:#c9bfa8}
+  .mo-cell{background:#faf7f0;border-color:var(--line)} .mo-cell span{color:var(--muted)} .mo-cell b{color:var(--text)}
+  .mo-cell.hi{background:#e3f3ea;border-color:#bfe3d2} .mo-cell.hi b{color:var(--success)} .mo-cell.good b{color:var(--success)} .mo-cell.bad b{color:var(--danger)} .mo-cell.muted b{color:var(--muted)}
+  .poseEst,.communs{background:#f7f4ec;border-color:#e2d8c6}
+  .poseEst-h,.communs-h{color:var(--verdant)} .poseEst-grid label,.communs-inputs label{color:var(--muted)}
+  .poseEst-out{background:#e3f3ea;border-color:#bfe3d2} .poseEst-out b{color:var(--success)}
+  .poseEst-note,.communs-note,.communs-intro{color:var(--muted)}
+  .communs-verdict.ok{background:#e3f3ea;color:var(--success)} .communs-verdict.ko{background:#fdf1dc;color:#9a6a00} .communs-verdict.neutral{background:#efe9dd;color:var(--muted)}
+  details.adv-wrap,details.pedago-wrap{background:#fff;border-color:var(--line)}
+  details.adv-wrap>summary{color:var(--text)} details.pedago-wrap>summary{color:var(--verdant)}
+  details.adv-wrap>summary:hover,details.pedago-wrap>summary:hover{background:#f7f3ea}
+  details.adv-wrap>summary::after,details.pedago-wrap>summary::after{color:var(--muted)}
+  #colToggle{background:#fff;color:var(--text);border-color:var(--line)} #colToggle:hover{background:#f7f3ea;border-color:var(--iris)}
+  .pedago{background:transparent}
+  .cbox{border-color:var(--line)} .cbox.right{border-color:#bfe3d2;background:#eef7f2} .cbox.wrong{border-color:#e6c2bc;background:#fdeeec}
+  .cbox .t{color:var(--text)} .cbox .formula,.revbox .rf{background:#f0ece2;color:var(--text)} .cbox .prow{color:var(--muted)} .cbox .prow b{color:var(--text)}
+  .cbox .verdict.ok{background:#e3f3ea;color:var(--success)} .cbox .verdict.ko{background:#fdeeec;color:var(--danger)}
+  .pedago-intro,.rev-note,.rev-title,.revbox .rl,.pedago h3,.pedago h4{color:var(--muted)} .revbox{background:#faf7f0;border-color:var(--line)} .revbox .rv{color:var(--text)}
+  .trap{background:#fdf1dc;border-color:#f0dcae;color:#9a6a00} .trap b{color:#9a6a00}
+  .verdict-line.ok{background:#e3f3ea;color:var(--success)} .verdict-line.ko{background:#fdeeec;color:var(--danger)} .verdict-line.neutral{background:#efe9dd;color:var(--muted)}
+  .saved-item{background:#fff;border-color:var(--line)} .saved-item .n{color:var(--text)} .saved-item .m{color:var(--muted)} .saved-item .pill{background:#ede7ff;color:var(--iris-deep)} .saved-empty{color:var(--muted)}
+  .status{background:var(--iris);color:#fff}
+  .conn.shared{background:#ede7ff;color:var(--iris-deep)} .conn.local{background:#fdf1dc;color:#9a6a00}
+  .savest.ok{color:var(--success)} .savest.warn{color:#9a6a00} .savest.muted{color:var(--muted)}
+  /* Menu déroulant maison des postes */
+  .poste-wrap{display:flex;align-items:center;gap:2px;width:100%}
+  .poste-in{flex:1 1 0;min-width:0}
+  .poste-arrow{flex:0 0 auto;width:22px;height:28px;border:0;background:transparent;cursor:pointer;color:var(--muted);font-size:11px;line-height:1;border-radius:6px;padding:0}
+  .poste-arrow:hover{background:#efe9dd;color:var(--iris-deep)}
+  .poste-pop{position:fixed;z-index:200;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(60,50,30,.16);max-height:260px;overflow:auto;padding:5px}
+  .poste-pop .opt{padding:8px 11px;border-radius:7px;cursor:pointer;font-size:13px;color:var(--text);white-space:nowrap}
+  .poste-pop .opt:hover,.poste-pop .opt.hi{background:#f3eeff;color:var(--iris-deep)}
+  .poste-pop .empty{padding:9px 11px;color:var(--muted);font-size:12px;white-space:nowrap}
+  /* Écran de connexion Google + choix d'espace */
+  .auth-overlay{position:fixed;inset:0;z-index:1000;display:none;align-items:center;justify-content:center;background:linear-gradient(135deg,#f4efe4,#efe7d8);padding:20px}
+  .auth-card{background:#fff;border:1px solid #e6ddcc;border-radius:20px;box-shadow:0 20px 60px rgba(60,50,30,.18);padding:34px 30px;max-width:360px;width:100%;text-align:center}
+  .auth-logo{width:52px;height:52px;border-radius:13px;background:#1F2937;color:#faf5e8;font-weight:800;font-size:26px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-family:'Inter Tight',sans-serif}
+  .auth-title{font-family:'Inter Tight',sans-serif;font-weight:800;font-size:24px;color:#1a1a1f}
+  .auth-sub{color:#6b6b72;font-size:14px;margin:6px 0 20px}
+  .auth-error{color:#c23b2e;font-size:13px;margin-top:14px;background:#fdeeec;border:1px solid #e6c2bc;border-radius:10px;padding:10px;line-height:1.4}
+  #authSignin{display:flex;justify-content:center;min-height:44px}
+  .espace-picker{display:none;flex-direction:column;gap:10px;margin-top:6px}
+  .espace-btn{padding:14px 16px;border-radius:14px;border:1px solid #e6ddcc;background:#faf7f0;color:#1a1a1f;font-weight:700;font-size:15px;cursor:pointer;font-family:'Inter Tight',sans-serif}
+  .espace-btn:hover{border-color:#8052ff;background:#f3eeff;color:#6a3fe6}
+  .auth-logout{margin-top:18px;background:none;border:0;color:#6b6b72;font-size:13px;cursor:pointer;text-decoration:underline}
+  .espace-chip{font-size:12px;color:#6b6b72}
+  .espace-chip a{color:#6a3fe6;text-decoration:none;font-weight:600}
+</style>
+</head>
+<body>
+<script src="https://accounts.google.com/gsi/client" async></script>
+
+<!-- Écran de connexion / choix d'espace (KAOMA) -->
+<div id="authOverlay" class="auth-overlay">
+  <div class="auth-card">
+    <div class="auth-logo">K</div>
+    <div class="auth-title">KAOMA Marge</div>
+    <div class="auth-sub" id="authSub">Connecte-toi pour accéder à ton espace.</div>
+    <div id="authSignin"></div>
+    <div id="espacePicker" class="espace-picker"></div>
+    <div id="authError" class="auth-error" style="display:none"></div>
+    <button id="authLogout" class="auth-logout" style="display:none" onclick="authLogout()">Changer de compte</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">K</div>
+      <div>
+        <h1>KAOMA Marge</h1>
+        <div class="sub">Du prix d'achat au prix de vente — sans se tromper · <span id="connBadge" class="conn local">mode local</span> <span id="espaceChip" class="espace-chip" style="display:none"></span></div>
+      </div>
+    </div>
+    <div class="dossier-bar">
+      <input id="dossierName" type="text" placeholder="Nom du dossier (ex. Boutique Quadro)" oninput="render()">
+      <button class="btn ghost" onclick="newDossier()">＋ Nouveau</button>
+      <button id="undoBtn" class="btn ghost" onclick="undoLast()" style="display:none">↩ Annuler</button>
+      <span id="saveStatus" class="savest"></span>
+    </div>
+  </header>
+
+  <div class="chibar" id="chibar">
+    <button id="chiSimple" onclick="setChi('simple')">🧾 Devis simple <small>PDR → PDV → marge</small></button>
+    <button id="chiDetail" onclick="setChi('detail')">📋 Chiffrage détaillé <small>par articles · + analyse avancée</small></button>
+  </div>
+
+  <div class="modebar">
+    <button id="mA" class="active" onclick="setMode('A')">
+      Du PDR → au PDV
+      <small>J'ai mon prix de revient, à quel prix vendre&nbsp;?</small>
+    </button>
+    <button id="mB" onclick="setMode('B')">
+      Du PDV → à la marge
+      <small>C'est déjà vendu, quelle marge je fais&nbsp;?</small>
+    </button>
+  </div>
+
+  <div class="grid">
+    <!-- CARTE DÉTAIL : lignes de coût (masquée en Devis simple) -->
+    <div class="card detail-only">
+      <h2>🧱 Prix de revient (PDR) — le détail par poste</h2>
+      <div class="hint">Tout ce que le dossier coûte vraiment : sous-traitance, fabrication interne, pose, transport, matière, BE, gruttage… Tape les montants en € HT. Le total = ton PDR.</div>
+
+      <div class="colbar detail-only"><button class="btn sm" id="colToggle" onclick="toggleCols()">👁 Colonnes : Essentiel</button></div>
+      <datalist id="posteSuggest"></datalist>
+      <div class="lines-wrap detail-only">
+      <table>
+        <thead>
+          <tr class="grp">
+            <th colspan="2" class="gArt">Article</th>
+            <th colspan="5" class="gPose">👷 Pose (main-d'œuvre)</th>
+            <th colspan="5" class="gFourn sepL">🧱 Fourniture (meuble)</th>
+            <th colspan="2" class="gTot sepL">💰 Ligne</th>
+            <th class="gMkt sepL">🛒 Marché</th>
+            <th class="gEnd"></th>
+          </tr>
+          <tr class="det">
+            <th>Poste</th><th>Type</th>
+            <th class="r gPose">Temps h</th><th class="r gPose">€/h</th><th class="r gPose gcost">Coût €</th><th class="r gPose">Marge</th><th class="r gPose">PV €</th>
+            <th class="r sepL gFourn">Qté</th><th class="r gFourn">PU €</th><th class="r gFourn gcost">Coût €</th><th class="r gFourn">Marge</th><th class="r gFourn">PV €</th>
+            <th class="r sepL gTot gcost">PDR €</th><th class="r gTot">PV €</th>
+            <th class="r sepL gMkt">Marché €/u</th><th class="gEnd"></th>
+          </tr>
+        </thead>
+        <tbody id="lines"></tbody>
+      </table>
+      </div>
+      <div class="split-line detail-only">dont PV <b>fourniture</b> <span id="ltFpv">0 €</span> &nbsp;·&nbsp; PV <b>pose</b> <span id="ltPpv">0 €</span></div>
+
+      <!-- ANALYSE AVANCÉE (mode Hôtel) — repliable -->
+      <details class="adv-wrap">
+        <summary>🔬 Analyse avancée — marché · budget hôtelier · communs · pose</summary>
+        <div class="adv-body">
+          <div class="repere-head">🛒 Comparaison au prix marché</div>
+          <div class="mo-out">
+            <div class="mo-cell"><span>Marché total estimé (avec pose)</span><b id="ltMkt">0 €</b></div>
+            <div class="mo-cell"><span>Marge si tu vends au prix marché</span><b id="ltMktMarge">0 %</b></div>
+            <div class="mo-cell"><span>Écart ton PV − marché</span><b id="ltMktEcart">0 €</b></div>
+            <div class="mo-cell" style="display:flex;align-items:center;justify-content:center"><button class="btn sm" onclick="alignMarket()" style="width:100%">⇄ Aligner mes PV sur le marché</button></div>
+          </div>
+
+          <div class="poseEst">
+            <div class="poseEst-h">🧰 Estimateur pose — jours ↔ budget</div>
+            <div class="poseEst-grid">
+              <label>Jours de pose<input id="peJours" type="text" inputmode="decimal" placeholder="0" oninput="poseEstFrom('jours')"></label>
+              <label>Budget pose €<input id="peBudget" type="text" inputmode="decimal" placeholder="0" oninput="poseEstFrom('budget')"></label>
+              <label>Taux €/jour<input id="peTaux" type="text" inputmode="decimal" value="420" oninput="poseEstFrom('taux')"></label>
+              <div class="poseEst-out"><span>≈ heures (1 j = 7 h)</span><b id="peHeures">0 h</b></div>
+            </div>
+            <div class="poseEst-note">Tape des <b>jours</b> → budget auto (jours × taux) · ou tape un <b>budget</b> → jours auto. Défaut ST Tecadis <b>420 €/j</b> (<span id="peCoutH">60</span> €/h · 7 h/j). Taux éditable.</div>
+          </div>
+
+          <div class="repere-head">🏨 Repère par chambre <span style="font-weight:500;color:var(--muted);font-size:11.5px">— pour les lots chambres</span></div>
+          <div class="mo-out" style="margin-top:2px">
+            <div class="mo-cell"><span>🏨 Nb chambres / clés hôtel</span><input id="nbRooms" class="lin pu" style="width:90px;margin-top:2px" type="text" inputmode="decimal" value="1" oninput="updNbRooms(this.value)"></div>
+            <div class="mo-cell hi"><span>Ton agencement / chambre</span><b id="bhPerRoom">0 €</b></div>
+            <div class="mo-cell"><span>Repère hôtelier (agencement fixe)</span><b style="font-size:13px">4★ 4–8 k€ · 5★ 16–20 k€</b></div>
+            <div class="mo-cell" id="bhVerdictCell"><span>Positionnement</span><b id="bhVerdict">—</b></div>
+          </div>
+
+          <div class="communs">
+            <div class="communs-h">🛎️ Repère parties communes — méthode hôtelière</div>
+            <div class="communs-intro">Les communs (bar, réception, buffet, banquettes) ne se budgètent pas à la chambre. Règle hôtelière FF&amp;E : les <b>chambres</b> pèsent 65-70 % du mobilier, les <b>espaces communs</b> 15-20 % (+ F&amp;B 10-15 %). L'agencement des communs représente donc ~<b>20-35 %</b> du budget agencement des chambres.</div>
+            <div class="communs-inputs">
+              <label>Budget agencement chambres (lot chambres) €<input id="commRooms" type="text" inputmode="decimal" placeholder="ex. 544 712" oninput="render()"></label>
+              <label>Surface communs m² (option)<input id="commSurface" type="text" inputmode="decimal" placeholder="—" oninput="render()"></label>
+            </div>
+            <div class="mo-out">
+              <div class="mo-cell hi"><span>Ton budget communs (ce dossier)</span><b id="commPv">0 €</b></div>
+              <div class="mo-cell" id="commPctCell"><span>% du budget chambres</span><b id="commPct">—</b></div>
+              <div class="mo-cell"><span>Communs / clé</span><b id="commPerKey">—</b></div>
+              <div class="mo-cell"><span>Communs / m²</span><b id="commPerM2">—</b></div>
+            </div>
+            <div class="communs-verdict neutral" id="commVerdict">Renseigne le budget des chambres (lot chambres) pour situer tes communs selon la règle 20-35 %.</div>
+            <div class="communs-note">Repères hôteliers : communs ≈ <b>20-35 %</b> des chambres · agencement/FF&amp;E lobby-public ~<b>1 500-3 000 €/m²</b> · un bar sur-mesure complet ~15-75 k€. Ordres de grandeur sourcés, à ajuster.</div>
+          </div>
+        </div>
+      </details>
+
+      <div class="addline detail-only">
+        <button class="btn sm" onclick="addLine('Sous-traitance','externe')">+ Sous-traitance</button>
+        <button class="btn sm" onclick="addLine('Fabrication interne','interne')">+ Fab interne</button>
+        <button class="btn sm" onclick="addLine('Pose','externe')">+ Pose</button>
+        <button class="btn sm" onclick="addLine('Transport','externe')">+ Transport</button>
+        <button class="btn sm" onclick="addLine('Matière','externe')">+ Matière</button>
+        <button class="btn sm" onclick="addLine('Bureau d\'études','interne')">+ BE</button>
+        <button class="btn sm" onclick="addLine('Gruttage / livraison étages','externe')">+ Gruttage</button>
+        <button class="btn sm" onclick="addLine('Rétrocession archi','externe')">+ Rétro archi</button>
+        <button class="btn sm" onclick="addLine('','externe')">+ Ligne libre</button>
+      </div>
+
+    </div>
+
+    <!-- CARTE RÉSULTAT (remontée en haut) : résultat + prix de vente + marge, tout au même endroit -->
+    <div class="card" id="panel">
+      <h2>💰 Résultat &amp; prix de vente</h2>
+      <div class="hint">Ton prix de revient, ton prix de vente et ta marge — tout au même endroit.</div>
+      <div class="result3">
+        <div class="rcard pdr"><div class="rl">PDR — prix de revient</div><div class="rv" id="r3pdr">0 €</div></div>
+        <div class="rcard pdv"><div class="rl">PDV — prix de vente</div><input id="pvB" class="rv-edit" type="text" inputmode="decimal" placeholder="saisis ton prix…" oninput="render()" style="display:none"><div class="rv" id="r3pdv">0 €</div></div>
+        <div class="rcard marge"><div class="rl">Marge</div><div class="rv" id="r3marge">0 €</div><div class="sub"><span id="r3taux">0 %</span> · coef <span id="r3coef">×0</span></div></div>
+      </div>
+      <div class="rlegend"><span>🟢 <b>Réel</b> — ce que le dossier fait vraiment</span><span>🟠 <b>Estimé / objectif</b> — cible ou repère (marge cible, PDR max, budget, marché)</span></div>
+      <div class="simple-only field" style="margin-top:16px">
+        <label style="font-weight:600">Débours total (PDR) — € HT</label>
+        <input id="simpleDebours" class="bigInput" type="text" inputmode="decimal" placeholder="0" oninput="setSimpleDebours(this.value)">
+        <div class="hint" style="margin-top:6px">Tape le coût total du chantier. Pour détailler par article, passe en « Chiffrage détaillé » (le détail s'affiche en dessous).</div>
+      </div>
+
+      <!-- MODE A -->
+      <div id="paneA">
+        <h2>🎯 Marge cible</h2>
+        <div class="hint">Quel pourcentage de marge veux-tu garder sur le prix de vente&nbsp;?</div>
+        <div class="field">
+          <div class="slider-wrap">
+            <input id="targetA" type="range" min="0" max="80" step="1" value="40" oninput="render()">
+            <span class="pct"><span id="targetApct">40</span>%</span>
+          </div>
+        </div>
+        <div class="hint" style="margin-top:4px">Ton PDV conseillé, ta marge et le coefficient s'affichent dans les cartes ci-dessus.</div>
+      </div>
+
+      <!-- MODE B -->
+      <div id="paneB" style="display:none">
+        <h2>💶 Marge sur ton prix de vente</h2>
+        <div class="hint">Saisis ton PDV dans la case « PDV » en haut. Voici la marge que ça dégage.</div>
+        <!-- marge, taux et coefficient sont affichés dans les cartes du haut (pas de doublon) -->
+        <div class="field" style="margin-top:16px">
+          <label>Comparaison à ton objectif <span id="bObjpct">40</span>% &nbsp;
+            <input id="targetB" type="range" min="0" max="80" step="1" value="40" oninput="render()" style="vertical-align:middle;width:120px;accent-color:var(--sage)">
+          </label>
+          <div class="kpis" style="margin-top:6px">
+            <div class="kpi est"><div class="lbl">PDR max pour tenir l'objectif</div><div class="val" id="bBudget">0 €</div></div>
+            <div class="kpi" id="bEcartBox"><div class="lbl" id="bEcartLbl">Écart vs PDR réel</div><div class="val" id="bEcart">0 €</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Decomposition bar (shared) -->
+      <div class="decomp">
+        <div class="eyebrow" style="margin-bottom:7px">Décomposition du prix de vente</div>
+        <div class="bar">
+          <div class="seg cost" id="segCost">PDR</div>
+          <div class="seg marge" id="segMarge">Marge</div>
+        </div>
+        <div class="leg"><span id="legCost">PDR 0 €</span><span id="legMarge">Marge 0 €</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PEDAGO (repliable, replié par défaut) -->
+  <details class="pedago-wrap"><summary>📚 Comprendre la marge — la méthode (diviser, pas multiplier)</summary>
+  <div class="pedago" style="margin-top:8px">
+    <h3 id="pedH3">📚 Pour 40% de marge : on DIVISE le PDR, on ne multiplie pas</h3>
+
+    <div class="pedago-intro" id="pedagoIntro">Exemple avec ton PDR de <b>0 €</b> et une marge visée de <b>40%</b> :</div>
+    <div class="compare">
+      <div class="cbox right">
+        <div class="t">✅ BONNE MÉTHODE — diviser</div>
+        <div class="formula" id="fRight">PDR ÷ 0,60</div>
+        <div class="prow"><span>Prix de vente conseillé</span><b id="rPV">0 €</b></div>
+        <div class="prow"><span>Marge</span><b id="rMarge">0 €</b></div>
+        <div class="verdict ok" id="rVerdict">= 40,0% du PDV ✓</div>
+      </div>
+      <div class="cbox wrong">
+        <div class="t">❌ ERREUR FRÉQUENTE — multiplier</div>
+        <div class="formula" id="fWrong">PDR × 1,40</div>
+        <div class="prow"><span>Prix de vente</span><b id="wPV">0 €</b></div>
+        <div class="prow"><span>Marge</span><b id="wMarge">0 €</b></div>
+        <div class="verdict ko" id="wVerdict">= 28,6% du PDV ✗</div>
+      </div>
+    </div>
+    <div class="trap" id="trapLine">
+      <b>⚡ À retenir :</b> en multipliant le PDR par 1,40 au lieu de le diviser par 0,60, tu vends trop bas et tu <b>perds de la marge sur le dossier</b>.
+    </div>
+
+    <div class="pedago-reverse">
+      <h4 class="rev-title">🔄 Et dans l'autre sens : je pars du prix de vente (PDV)</h4>
+      <div class="pedago-intro" id="revIntro">On part de ton PDV de <b>0 €</b> :</div>
+      <div class="revgrid">
+        <div class="revbox"><div class="rl">Ma marge</div><div class="rf">PDV − PDR</div><div class="rv" id="revMargeE">0 €</div></div>
+        <div class="revbox"><div class="rl" id="revL2">PDR max pour tenir 40%</div><div class="rf" id="revF2">PDV × 0,60</div><div class="rv" id="revPDRmax">0 €</div></div>
+      </div>
+      <div class="rev-note" id="revNote">Ta marge = prix de vente − prix de revient. Tant que ton PDR réel reste sous le PDR max, tu fais plus que ton objectif de marge.</div>
+    </div>
+  </div>
+  </details>
+
+  <!-- SAVED -->
+  <div class="card saved">
+    <div id="recoverBanner" style="display:none"></div>
+    <h2>🗂️ Dossiers enregistrés <span class="eyebrow" id="savedScope">(base partagée)</span></h2>
+    <div class="hint">Visibles par toute l'équipe — Romain, Loanah, Emeric… Clique pour rouvrir un dossier.</div>
+    <div class="saved-list" id="savedList"></div>
+  </div>
+</div>
+
+<div class="status" id="status"></div>
+
+<script>
+/* ---------- Helpers ---------- */
+const EUR = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+const NUM = new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0});
+const $ = id => document.getElementById(id);
+const parseNum = v => { if(typeof v==='number')return v; const n=parseFloat(String(v||'').replace(/\s/g,'').replace(/ /g,'').replace(',','.').replace(/[^\d.\-]/g,'')); return isNaN(n)?0:n; };
+
+let mode='A';
+let lines=[]; // {label, type, amount}
+let moMode='vente';        // 'vente' = coût+taux de vente · 'marge' = coût+marge %
+let moLines=[];            // main-d'œuvre : {label, hours, cout, vente, marge}
+let suppressAutosave=false; // vrai pendant les chargements programmatiques (pas d'autosave)
+let _autosaveT;
+let nbRooms=1; // nb de chambres du projet (repère budget hôtelier)
+let chi='detail'; // V2 : type de chiffrage — 'simple' | 'detail' | 'hotel'
+
+/* ---------- Articles (lignes de coût) ---------- */
+function defaultLines(){
+  const mk=(label,type)=>({label,type,qty:1,pu:0,marginMode:'pct',marginPct:40,marginEur:0,poseH:0,poseCout:60,poseMode:'pct',posePct:15,poseEur:0,market:0});
+  return [ mk('Bureau d\'études','interne'), mk('Transport','externe'), mk('Pose','externe'),
+           mk('Sous-traitance','externe'), mk('Fabrication interne','interne'), mk('Matière','externe') ];
+}
+function lineCost(l){ return (l.qty!=null) ? (l.qty||0)*(l.pu||0) : (l.amount||0); }
+function marginCalc(cost,mode,pct,eur){
+  if(mode==='eur'){ const marge=eur||0, pv=cost+marge; return {pv,marge,pct:pv>0?marge/pv:0}; }
+  const p=(pct||0)/100, pv=p<1?cost/(1-p):0; return {pv,marge:pv-cost,pct:p};
+}
+// Chaque ligne = FOURNITURE (Qté×PU) + POSE (Temps×€/h), chacune avec sa marge
+function computeLine(l){
+  const fCost=lineCost(l);
+  const f=marginCalc(fCost, l.marginMode||'pct', l.marginPct, l.marginEur);
+  const pCost=(l.poseH||0)*(l.poseCout||0);
+  const p=marginCalc(pCost, l.poseMode||'pct', l.posePct, l.poseEur);
+  const cost=fCost+pCost, pv=f.pv+p.pv, marge=f.marge+p.marge;
+  return {fCost,fPV:f.pv,fMarge:f.marge, pCost,pPV:p.pv,pMarge:p.marge, cost,pv,marge, pct:pv>0?marge/pv:0};
+}
+function fPvuHtml(l,r){
+  const q=(l.qty!=null&&l.qty>0)?l.qty:1;
+  const u=r.fPV/q, mk=l.market||0;
+  const col = mk>0 ? (u>=mk?'color:var(--success)':'color:var(--danger)') : '';
+  return `<span style="${col}" title="PV unitaire fourniture">${EUR.format(Math.round(u))}</span>`;
+}
+function mgInputHtml(i,mode,pct,eur,keyPct,keyEur){
+  return mode==='eur'
+    ? `<input class="lin" type="text" inputmode="decimal" value="${eur?NUM2.format(eur):''}" placeholder="0" oninput="updLine(${i},'${keyEur}',this.value)">`
+    : `<input class="lin" type="text" inputmode="decimal" value="${pct!=null&&pct!==''?NUM2.format(pct):''}" placeholder="40" oninput="updLine(${i},'${keyPct}',this.value)">`;
+}
+function renderLines(){
+  const tb=$('lines'); tb.innerHTML='';
+  lines.forEach((l,i)=>{
+    const r=computeLine(l);
+    const fMg=mgInputHtml(i,l.marginMode||'pct',l.marginPct,l.marginEur,'marginPct','marginEur');
+    const pMg=mgInputHtml(i,l.poseMode||'pct',l.posePct,l.poseEur,'posePct','poseEur');
+    const tr=document.createElement('tr'); tr.className='line-row';
+    tr.innerHTML=`
+      <td><span class="poste-wrap"><input type="text" class="poste-in" autocomplete="off" value="${escapeHtml(l.label)}" placeholder="Nom du poste…" oninput="updLine(${i},'label',this.value);postePopFilter(this)" onfocus="postePopOpen(this,${i})" onkeydown="postePopKey(event,this,${i})" onchange="savePoste(this.value)"><button type="button" class="poste-arrow" tabindex="-1" title="Voir tous les postes" onclick="postePopToggle(this,${i})">▾</button></span></td>
+      <td><button class="tag ${l.type}" onclick="toggleType(${i})" title="Cliquer pour basculer interne/externe">${l.type}</button></td>
+      <td class="r colPose"><input class="lin" type="text" inputmode="decimal" value="${l.poseH?NUM2.format(l.poseH):''}" placeholder="0" oninput="updLine(${i},'poseH',this.value)"></td>
+      <td class="r colPose"><input class="lin" type="text" inputmode="decimal" value="${l.poseCout!=null&&l.poseCout!==''?NUM2.format(l.poseCout):''}" placeholder="40" oninput="updLine(${i},'poseCout',this.value)"></td>
+      <td class="lcell cost colPose" id="lnPcost${i}">${EUR.format(Math.round(r.pCost))}</td>
+      <td class="r colPose"><span class="mgwrap"><button class="mgstep" onclick="bumpMargin(${i},'p',-1)" title="−">−</button>${pMg}<button class="mgtoggle" onclick="toggleLineMargin(${i},'p')" title="Basculer % / €">${l.poseMode==='eur'?'€':'%'}</button><button class="mgstep" onclick="bumpMargin(${i},'p',1)" title="+">+</button></span></td>
+      <td class="lcell pv colPose" id="lnPpv${i}">${EUR.format(Math.round(r.pPV))}</td>
+      <td class="r sepL"><input class="lin" type="text" inputmode="decimal" value="${l.qty!=null&&l.qty!==''?NUM2.format(l.qty):''}" placeholder="1" oninput="updLine(${i},'qty',this.value)"></td>
+      <td class="r"><input class="lin pu" type="text" inputmode="decimal" value="${l.pu?NUM2.format(l.pu):''}" placeholder="0" oninput="updLine(${i},'pu',this.value)"></td>
+      <td class="lcell cost" id="lnFcost${i}">${EUR.format(Math.round(r.fCost))}</td>
+      <td class="r"><span class="mgwrap"><button class="mgstep" onclick="bumpMargin(${i},'f',-1)" title="−">−</button>${fMg}<button class="mgtoggle" onclick="toggleLineMargin(${i},'f')" title="Basculer % / €">${l.marginMode==='eur'?'€':'%'}</button><button class="mgstep" onclick="bumpMargin(${i},'f',1)" title="+">+</button></span></td>
+      <td class="lcell pv" id="lnFpv${i}">${EUR.format(Math.round(r.fPV))}</td>
+      <td class="lcell cost sepL" id="lnPdr${i}">${EUR.format(Math.round(r.cost))}</td>
+      <td class="lcell pv" id="lnTot${i}">${EUR.format(Math.round(r.pv))}</td>
+      <td class="r sepL colMkt"><input class="lin pu" type="text" inputmode="decimal" value="${l.market?NUM2.format(l.market):''}" placeholder="—" oninput="updLine(${i},'market',this.value)"><div class="mktrange">${(l.marketLow&&l.marketHigh)?NUM2.format(l.marketLow)+'–'+NUM2.format(l.marketHigh):''}</div></td>
+      <td class="r"><button class="del" onclick="delLine(${i})" title="Supprimer">×</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+function escapeHtml(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+/* ---------- Postes mémorisés : autocomplétion inter-dossiers (ne plus retaper) ---------- */
+function cleanLabel(s){
+  s=String(s||'').replace(/\s+/g,' ').trim(); if(!s) return '';
+  const hasLower=/[a-zà-ÿ]/.test(s), hasUpper=/[A-ZÀ-Ÿ]/.test(s);
+  if(!hasLower || !hasUpper){ s=s.charAt(0).toUpperCase()+s.slice(1).toLowerCase(); } // ALL CAPS ou tout minuscule -> 1re lettre en majuscule
+  return s;
+}
+const POSTE_SEED=["Bureau d'études","Transport","Pose","Sous-traitance","Fabrication interne","Matière","Gruttage / livraison étages","Rétrocession archi","Quincaillerie"];
+function loadPostes(){ try{ const a=JSON.parse(localStorage.getItem('kaoma_postes')||'null'); return (Array.isArray(a)&&a.length)?a:POSTE_SEED.slice(); }catch(e){ return POSTE_SEED.slice(); } }
+function savePoste(label){
+  const c=cleanLabel(label); if(c.length<2) return;
+  const arr=loadPostes();
+  if(!arr.some(x=>x.toLowerCase()===c.toLowerCase())){ arr.push(c); arr.sort((a,b)=>a.localeCompare(b,'fr')); try{localStorage.setItem('kaoma_postes',JSON.stringify(arr));}catch(e){} populatePosteSuggest(); }
+}
+function populatePosteSuggest(){ const dl=$('posteSuggest'); if(!dl) return; dl.innerHTML=loadPostes().map(p=>'<option value="'+escapeHtml(p)+'"></option>').join(''); }
+/* Menu déroulant maison des postes — le datalist natif se filtre sur le texte déjà saisi (flèche inopérante une fois un poste choisi). Ici : flèche ▾ + clavier ↑↓ affichent TOUJOURS tous les postes. */
+let postePopIdx=-1, postePopInput=null;
+function postePopEl(){ let p=$('postePop'); if(!p){ p=document.createElement('div'); p.id='postePop'; p.className='poste-pop'; p.hidden=true; document.body.appendChild(p);} return p; }
+function postePopOpen(inp,i){ postePopIdx=i; postePopInput=inp; postePopRender(''); postePopPosition(inp); }
+function postePopFilter(inp){ postePopInput=inp; postePopRender(inp.value); postePopPosition(inp); }
+function postePopToggle(btn,i){ const inp=btn.parentElement.querySelector('.poste-in'); if(!inp) return; const p=postePopEl(); if(!p.hidden && postePopInput===inp){ postePopClose(); } else { postePopIdx=i; postePopInput=inp; postePopRender(''); postePopPosition(inp); inp.focus(); } }
+function postePopPosition(inp){ const p=postePopEl(); const r=inp.getBoundingClientRect(); p.style.left=Math.round(r.left)+'px'; p.style.top=Math.round(r.bottom+2)+'px'; p.style.minWidth=Math.max(r.width,180)+'px'; }
+function postePopRender(q){ const p=postePopEl(); p.innerHTML=''; const ql=String(q||'').toLowerCase().trim(); const all=loadPostes(); const list=ql?all.filter(x=>x.toLowerCase().includes(ql)):all; if(!list.length){ const d=document.createElement('div'); d.className='empty'; d.textContent='Aucun poste enregistré — tape pour en créer un'; p.appendChild(d);} else { list.forEach(x=>{ const d=document.createElement('div'); d.className='opt'; d.textContent=x; d.addEventListener('mousedown',e=>{ e.preventDefault(); postePick(x); }); p.appendChild(d); }); } p.hidden=false; }
+function postePick(val){ if(postePopIdx<0||!postePopInput) return; postePopInput.value=val; updLine(postePopIdx,'label',val); savePoste(val); postePopClose(); }
+function postePopClose(){ const p=$('postePop'); if(p) p.hidden=true; postePopIdx=-1; postePopInput=null; }
+function postePopKey(e,inp,i){ const p=postePopEl(); if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); if(p.hidden){ postePopIdx=i; postePopInput=inp; postePopRender(''); postePopPosition(inp); } const opts=[].slice.call(p.querySelectorAll('.opt')); if(!opts.length) return; let cur=opts.findIndex(o=>o.classList.contains('hi')); cur=e.key==='ArrowDown'?Math.min(opts.length-1,(cur<0?-1:cur)+1):Math.max(0,(cur<0?0:cur)-1); opts.forEach(o=>o.classList.remove('hi')); opts[cur].classList.add('hi'); opts[cur].scrollIntoView({block:'nearest'}); } else if(e.key==='Enter'){ const hi=(!p.hidden)?p.querySelector('.opt.hi'):null; if(hi){ e.preventDefault(); postePick(hi.textContent); } } else if(e.key==='Escape'){ postePopClose(); } }
+document.addEventListener('click',function(e){ const p=$('postePop'); if(!p||p.hidden) return; if(p.contains(e.target)) return; if(e.target.closest&&e.target.closest('.poste-wrap')) return; postePopClose(); });
+window.addEventListener('scroll',function(){ const p=$('postePop'); if(p&&!p.hidden) postePopClose(); }, true);
+window.addEventListener('resize',function(){ postePopClose(); });
+function newLineObj(label,type){ const m=parseNum($('targetA').value)||40; return {label:label||'',type:type||'externe',qty:1,pu:0,marginMode:'pct',marginPct:m,marginEur:0,poseH:0,poseCout:60,poseMode:'pct',posePct:15,poseEur:0,market:0}; }
+function addLine(label,type){ lines.push(newLineObj(label,type)); renderLines(); render(); }
+function delLine(i){ snapshotUndo(); lines.splice(i,1); renderLines(); render(); }
+function updLine(i,k,v){
+  lines[i][k] = (k==='label')? v : parseNum(v);
+  if(k!=='label'){
+    const r=computeLine(lines[i]);
+    const set=(id,val)=>{const e=$(id); if(e) e.textContent=EUR.format(Math.round(val));};
+    set('lnPcost'+i,r.pCost); set('lnPpv'+i,r.pPV);
+    set('lnFcost'+i,r.fCost); set('lnFpv'+i,r.fPV);
+    set('lnPdr'+i,r.cost);    set('lnTot'+i,r.pv);
+  }
+  render();
+}
+function toggleLineMargin(i,which){
+  const l=lines[i], r=computeLine(l);
+  if(which==='p'){
+    if(l.poseMode==='eur'){ l.poseMode='pct'; l.posePct=Math.round((r.pPV>0?r.pMarge/r.pPV:0)*10000)/100; }
+    else { l.poseMode='eur'; l.poseEur=Math.round(r.pMarge*100)/100; }
+  } else {
+    if(l.marginMode==='eur'){ l.marginMode='pct'; l.marginPct=Math.round((r.fPV>0?r.fMarge/r.fPV:0)*10000)/100; }
+    else { l.marginMode='eur'; l.marginEur=Math.round(r.fMarge*100)/100; }
+  }
+  renderLines(); render();
+}
+function toggleType(i){ lines[i].type = lines[i].type==='interne'?'externe':'interne'; renderLines(); render(); }
+function totalCost(){ return lines.reduce((s,l)=>s+computeLine(l).cost,0); }
+function globalTotals(){
+  let cost=0,pv=0,fpv=0,ppv=0,mkt=0;
+  lines.forEach(l=>{ const r=computeLine(l); cost+=r.cost; pv+=r.pv; fpv+=r.fPV; ppv+=r.pPV; mkt+=(l.market||0)*(l.qty!=null?(l.qty||0):1); });
+  const marge=pv-cost, taux=pv>0?marge/pv:0;
+  const marketTotal=mkt+ppv;                                  // fourniture au marché + ta pose
+  const margeMkt=marketTotal>0?(marketTotal-cost)/marketTotal:0;
+  return {cost,pv,marge,taux,fpv,ppv,marketFourn:mkt,marketTotal,margeMkt};
+}
+function renderLineTotals(){
+  const g=globalTotals();
+  if($('ltPdr'))   $('ltPdr').textContent   = EUR.format(Math.round(g.cost));
+  if($('ltPv'))    $('ltPv').textContent    = EUR.format(Math.round(g.pv));
+  if($('ltMarge')) $('ltMarge').textContent = EUR.format(Math.round(g.marge));
+  if($('ltTaux'))  $('ltTaux').textContent  = (g.taux*100).toFixed(1).replace('.',',')+' %';
+  if($('ltFpv')) $('ltFpv').textContent = EUR.format(Math.round(g.fpv));
+  if($('ltPpv')) $('ltPpv').textContent = EUR.format(Math.round(g.ppv));
+  renderBudgetHotelier(g);
+  renderCommuns(g);
+  if($('ltMkt')) $('ltMkt').textContent = EUR.format(Math.round(g.marketTotal));
+  if($('ltMktMarge')) $('ltMktMarge').textContent = (g.margeMkt*100).toFixed(1).replace('.',',')+' %';
+  if($('ltMktEcart')){ const ec=g.pv-g.marketTotal; const el=$('ltMktEcart'); el.textContent=(ec>=0?'+':'')+EUR.format(Math.round(ec)); el.parentElement.className='mo-cell '+(ec>=0?'good':'bad'); }
+}
+function updNbRooms(v){ nbRooms=parseNum(v)||1; renderBudgetHotelier(); }
+function renderBudgetHotelier(g){
+  g = g || globalTotals();
+  const per = g.pv/(nbRooms||1);
+  if($('bhPerRoom')) $('bhPerRoom').textContent = EUR.format(Math.round(per));
+  const v=$('bhVerdict'), cell=$('bhVerdictCell'); if(!v) return;
+  let txt,cls;
+  if(per<4000){ txt='sous repère 4★'; cls='muted'; }
+  else if(per<8000){ txt='niveau 4★'; cls='muted'; }
+  else if(per<16000){ txt='haut 4★ / entrée 5★'; cls='good'; }
+  else if(per<=20000){ txt='niveau 5★ ✓'; cls='good'; }
+  else { txt='5★+ très premium'; cls='good'; }
+  v.textContent=txt; if(cell) cell.className='mo-cell '+cls;
+}
+/* ---------- Estimateur pose : jours ↔ budget ---------- */
+function poseEstFrom(src){
+  const taux=parseNum($('peTaux').value)||420;
+  if(src==='budget'){
+    const b=parseNum($('peBudget').value); const j=taux>0?b/taux:0;
+    $('peJours').value = j? NUM2.format(Math.round(j*100)/100):'';
+  } else { // 'jours' ou 'taux' → recalcule le budget depuis les jours
+    const j=parseNum($('peJours').value); const b=j*taux;
+    $('peBudget').value = b? NUM.format(Math.round(b)):'';
+  }
+  const jj=parseNum($('peJours').value);
+  if($('peHeures')) $('peHeures').textContent = NUM.format(Math.round(jj*7))+' h';
+  if($('peCoutH')) $('peCoutH').textContent = NUM.format(Math.round(taux/7));
+}
+/* ---------- Repère parties communes (méthode hôtelière) ---------- */
+function renderCommuns(g){
+  g = g || globalTotals();
+  const pv=g.pv;
+  if($('commPv')) $('commPv').textContent=EUR.format(Math.round(pv));
+  const roomsB=$('commRooms')?parseNum($('commRooms').value):0;
+  const surf=$('commSurface')?parseNum($('commSurface').value):0;
+  const cell=$('commPctCell'), vd=$('commVerdict');
+  if(roomsB>0){
+    const pct=pv/roomsB*100;
+    if($('commPct')) $('commPct').textContent=pct.toFixed(1).replace('.',',')+' %';
+    let cls,txt;
+    if(pct<20){ cls='neutral'; txt='sous le repère communs (20-35 %) — budget encore incomplet ou communs légers'; }
+    else if(pct<=35){ cls='ok'; txt='dans le repère hôtelier 20-35 % ✓ proportion saine communs / chambres'; }
+    else { cls='ko'; txt='au-dessus du repère 20-35 % — communs lourds vs chambres, à vérifier'; }
+    if(cell) cell.className='mo-cell '+(cls==='ok'?'good':(cls==='ko'?'bad':''));
+    if(vd){ vd.textContent='Verdict : '+txt+'.'; vd.className='communs-verdict '+cls; }
+  } else {
+    if($('commPct')) $('commPct').textContent='—';
+    if(cell) cell.className='mo-cell';
+    if(vd){ vd.textContent='Renseigne le budget des chambres (lot chambres) pour situer tes communs selon la règle 20-35 %.'; vd.className='communs-verdict neutral'; }
+  }
+  if($('commPerKey')) $('commPerKey').textContent = nbRooms>0 ? EUR.format(Math.round(pv/nbRooms)) : '—';
+  if($('commPerM2'))  $('commPerM2').textContent  = surf>0 ? EUR.format(Math.round(pv/surf))+' /m²' : '—';
+}
+// Aligner les PV fourniture sur le prix marché (ajuste la marge par ligne) → change la marge globale
+function alignMarket(){
+  if(!confirm('Aligner tes prix de vente fourniture sur le prix marché de chaque ligne ? (ta marge par ligne sera recalculée — tu pourras Annuler)')) return;
+  snapshotUndo();
+  lines.forEach(l=>{ const mk=(l.market||0); if(mk>0){ l.marginMode='pct'; l.marginPct=Math.round(((mk-(l.pu||0))/mk)*10000)/100; } });
+  renderLines(); render(); toast('PV alignés sur le marché — Annuler dispo');
+}
+/* ---------- Annuler (undo 1 niveau) ---------- */
+let _undo=null;
+function snapshotUndo(){ _undo=JSON.parse(JSON.stringify(lines)); updateUndoBtn(); }
+function undoLast(){ if(!_undo) return; lines=_undo; _undo=null; renderLines(); render(); updateUndoBtn(); toast('↩ Modification annulée'); }
+function updateUndoBtn(){ const b=$('undoBtn'); if(b) b.style.display=_undo?'inline-flex':'none'; }
+/* ---------- +/- marge ---------- */
+function bumpMargin(i,which,delta){
+  const l=lines[i];
+  if(which==='p'){ if(l.poseMode==='eur'){ l.poseEur=Math.round(((l.poseEur||0)+delta*10)*100)/100; } else { l.posePct=Math.max(0,Math.round(((l.posePct||0)+delta)*100)/100); } }
+  else { if(l.marginMode==='eur'){ l.marginEur=Math.round(((l.marginEur||0)+delta*10)*100)/100; } else { l.marginPct=Math.max(0,Math.round(((l.marginPct||0)+delta)*100)/100); } }
+  renderLines(); render();
+}
+
+const NUM2 = new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2});
+// Migration : convertit d'anciennes lignes MO (heures/coût/vente) en lignes-pose du tableau unifié
+function moLineToRow(l, moMode){
+  const c=parseNum(l.cout), h=parseNum(l.hours);
+  let posePct;
+  if(moMode==='marge'){ posePct=parseNum(l.marge); }
+  else { const v=parseNum(l.vente); posePct = v>0 ? (v-c)/v*100 : 0; }
+  return {label:'MO '+(l.label||'main-d\'œuvre'),type:'interne',qty:0,pu:0,marginMode:'pct',marginPct:0,marginEur:0,
+          poseH:h,poseCout:c,poseMode:'pct',posePct:Math.round(posePct*100)/100,poseEur:0,market:0};
+}
+
+/* ---------- Mode ---------- */
+function setMode(m){
+  mode=m;
+  $('mA').classList.toggle('active',m==='A');
+  $('mB').classList.toggle('active',m==='B');
+  $('paneA').style.display = m==='A'?'block':'none';
+  $('paneB').style.display = m==='B'?'block':'none';
+  // PDV : une seule saisie, dans la case résultat. Éditable en mode B, calculée (affichage) sinon.
+  if($('pvB')) $('pvB').style.display = m==='B'?'block':'none';
+  if($('r3pdv')) $('r3pdv').style.display = m==='B'?'none':'block';
+  render();
+}
+/* ---------- V2 : type de chiffrage (simple / detail / hotel) ---------- */
+function currentPDR(){ return totalCost(); } // PDR = total des lignes, identique dans TOUS les modes (partagé)
+function applyChi(){
+  document.body.classList.remove('chi-simple','chi-detail','chi-hotel');
+  document.body.classList.add('chi-'+chi);
+  const map={simple:'chiSimple',detail:'chiDetail'};
+  ['chiSimple','chiDetail'].forEach(id=>{const b=$(id);if(b)b.classList.toggle('active',id===map[chi]);});
+}
+function setChi(m){
+  chi=m; try{localStorage.setItem('kaoma_chi',m);}catch(e){} applyChi();
+  if(m==='simple' && $('simpleDebours')){ const t=totalCost(); if(t>0 && !parseNum($('simpleDebours').value)) $('simpleDebours').value=NUM.format(Math.round(t)); }
+  render();
+}
+// Devis simple : le débours saisi = le PDR (une seule ligne), partagé avec les autres modes
+function setSimpleDebours(v){
+  const m=parseNum($('targetA').value)||40;
+  lines=[{label:'Débours total (devis simple)',type:'externe',qty:1,pu:parseNum(v),marginMode:'pct',marginPct:m,marginEur:0,poseH:0,poseCout:60,poseMode:'pct',posePct:15,poseEur:0,market:0}];
+  renderLines(); render();
+}
+// Tableau : bascule vue essentielle / complète (pose & marché repliés)
+let colsEss=true;
+function applyCols(){ const w=document.querySelector('.lines-wrap'); if(w) w.classList.toggle('ess',colsEss); const b=$('colToggle'); if(b) b.textContent = colsEss?'👁 Colonnes : Essentiel (pose & marché masqués)':'👁 Colonnes : tout afficher'; }
+function toggleCols(){ colsEss=!colsEss; try{localStorage.setItem('kaoma_cols',colsEss?'ess':'all');}catch(e){} applyCols(); }
+
+/* ---------- Core render ---------- */
+function render(){
+  const D = currentPDR();
+  renderLineTotals();
+
+  // targets reflected
+  const tA = parseNum($('targetA').value)/100;
+  $('targetApct').textContent = Math.round(tA*100);
+  const tB = parseNum($('targetB').value)/100;
+  $('bObjpct').textContent = Math.round(tB*100);
+
+  let PV, marge, taux;
+
+  if(mode==='A'){
+    const t = Math.min(tA,0.999);
+    PV = t<1 ? D/(1-t) : 0;
+    marge = PV - D;
+    taux = t;
+  } else {
+    PV = parseNum($('pvB').value);
+    marge = PV - D;
+    taux = PV>0 ? marge/PV : 0;
+    // budget vs réel (logique velleda)
+    const budget = PV*(1-tB);
+    const ecart = budget - D; // positif = sous budget = marge bonus
+    $('bBudget').textContent = EUR.format(Math.round(budget));
+    $('bEcart').textContent = (ecart>=0?'+':'')+EUR.format(Math.round(ecart));
+    $('bEcartLbl').textContent = ecart>=0 ? 'Sous budget (marge bonus)' : 'Dépassement budget';
+    $('bEcartBox').className = 'kpi '+(ecart>=0?'good':'bad');
+    // color margin kpi
+  }
+
+  // (marge, taux et coefficient sont affichés dans les cartes du haut — plus de doublon)
+
+  // Decomposition bar
+  const safePV = PV>0?PV:0;
+  const costPct = safePV>0 ? Math.max(0,Math.min(100, D/safePV*100)) : (D>0?100:0);
+  const margePct = 100-costPct;
+  $('segCost').style.flexBasis = costPct+'%';
+  $('segMarge').style.flexBasis = margePct+'%';
+  $('segCost').textContent = costPct>14 ? 'Coût '+Math.round(costPct)+'%' : '';
+  $('segMarge').textContent = margePct>14 ? 'Marge '+Math.round(margePct)+'%' : '';
+  $('legCost').textContent = 'Coût '+EUR.format(Math.round(D));
+  $('legMarge').textContent = 'Marge '+EUR.format(Math.round(marge||0));
+
+  // ---- PEDAGO : 2 blocs empilés (leçon diviser/multiplier + je pars du PDV) ----
+  const t = mode==='A'? Math.min(tA,0.999) : tB;     // taux objectif du mode courant
+  const pct = Math.round(t*100);
+  const dec = (1-t).toFixed(2).replace('.',',');     // ex 0,60
+  const mult = (1+t).toFixed(2).replace('.',',');    // ex 1,40
+  $('pedH3').textContent = `📚 Pour ${pct}% de marge : on DIVISE le PDR, on ne multiplie pas`;
+
+  // BLOC 1 — à quel prix vendre : diviser vs multiplier
+  const rightPV = t<1 ? D/(1-t) : 0, rightMarge = rightPV - D;
+  const wrongPV = D*(1+t), wrongMarge = wrongPV - D, wrongRate = wrongPV>0 ? wrongMarge/wrongPV : 0;
+  const perte = rightPV - wrongPV;
+  $('pedagoIntro').innerHTML = `Exemple avec ton PDR de <b>${EUR.format(Math.round(D))}</b> et une marge visée de <b>${pct}%</b> :`;
+  $('fRight').textContent = `PDR ÷ ${dec}`;
+  $('rPV').textContent = EUR.format(Math.round(rightPV));
+  $('rMarge').textContent = EUR.format(Math.round(rightMarge));
+  $('rVerdict').textContent = `= ${(t*100).toFixed(1).replace('.',',')}% du PDV ✓`;
+  $('fWrong').textContent = `PDR × ${mult}`;
+  $('wPV').textContent = EUR.format(Math.round(wrongPV));
+  $('wMarge').textContent = EUR.format(Math.round(wrongMarge));
+  $('wVerdict').textContent = `= ${(wrongRate*100).toFixed(1).replace('.',',')}% du PDV ✗`;
+  $('trapLine').innerHTML = `<b>⚡ À retenir :</b> en multipliant le PDR par ${mult} au lieu de le diviser par ${dec}, tu vends <b>${EUR.format(Math.round(perte))}</b> trop bas — c'est <b>${EUR.format(Math.round(perte))} de marge perdue</b>. Pour ${pct}% : <b>PDR ÷ ${dec}</b> (= ×${t<1?(1/(1-t)).toFixed(3).replace('.',','):'∞'}).`;
+
+  // BLOC 2 — je pars du PDV : on prend TON PDV réel (qui change) si saisi, sinon le PDV conseillé
+  const pvSaisi = parseNum($('pvB').value);
+  let pdvRef, pdvSrc;
+  if(mode==='B' && pvSaisi>0){ pdvRef = pvSaisi; pdvSrc = 'ton PDV saisi'; }
+  else { pdvRef = rightPV; pdvSrc = 'le PDV conseillé'; }
+  const margeRef = pdvRef - D;
+  const tauxRef = pdvRef>0 ? margeRef/pdvRef : 0;
+  const pdrMax = pdvRef*(1-t);
+  $('revIntro').innerHTML = `On part de <b>${pdvSrc}</b> de <b>${EUR.format(Math.round(pdvRef))}</b> :`;
+  $('revMargeE').textContent = EUR.format(Math.round(margeRef));
+  $('revL2').textContent = `PDR max pour tenir ${pct}%`;
+  $('revF2').textContent = `PDV × ${dec}`;
+  $('revPDRmax').textContent = EUR.format(Math.round(pdrMax));
+  $('revNote').innerHTML = `Ta marge = <b>${EUR.format(Math.round(pdvRef))} − ${EUR.format(Math.round(D))} = ${EUR.format(Math.round(margeRef))}</b>, soit <b>${(tauxRef*100).toFixed(1).replace('.',',')}%</b> du PDV. Tant que ton PDR réel reste sous <b>${EUR.format(Math.round(pdrMax))}</b>, tu dépasses ${pct}% de marge.`;
+
+  // ---- Résultat clair (PDR · PDV · Marge) — simple = résultat cible ; détaillé/hôtel = totaux articles ----
+  { const g2=globalTotals();
+    let Rpdr,Rpdv,Rmarge,Rtaux;
+    if(chi==='simple'){ Rpdr=D; Rpdv=PV; Rmarge=marge; Rtaux=taux; }
+    else { Rpdr=g2.cost;
+      if(mode==='B'){ Rpdv=parseNum($('pvB').value); Rmarge=Rpdv-Rpdr; Rtaux=Rpdv>0?Rmarge/Rpdv:0; }
+      else { Rpdv=g2.pv; Rmarge=g2.marge; Rtaux=g2.taux; }
+    }
+    if($('r3pdr'))   $('r3pdr').textContent   = EUR.format(Math.round(Rpdr));
+    if($('r3pdv'))   $('r3pdv').textContent   = EUR.format(Math.round(Rpdv));
+    if($('r3marge')) $('r3marge').textContent = EUR.format(Math.round(Rmarge));
+    if($('r3taux'))  $('r3taux').textContent  = (Rtaux*100).toFixed(1).replace('.',',')+' % de marge';
+    if($('r3coef'))  $('r3coef').textContent  = Rpdr>0 ? '×'+(Rpdv/Rpdr).toFixed(3).replace('.',',') : '×0';
+  }
+
+  if(!suppressAutosave) scheduleAutosave();
+}
+
+/* ---------- Persistence (shared API + local fallback) ---------- */
+let API_OK=false;
+
+/* ---------- Enregistrement automatique ---------- */
+function setSaveStatus(s){
+  const el=$('saveStatus'); if(!el) return;
+  const now=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  const map={
+    idle:['',''],
+    unnamed:['✏️ Nomme le dossier → enregistrement auto','warn'],
+    pending:['Modifs en attente…','muted'],
+    saving:['Enregistrement…','muted'],
+    saved:['✓ Enregistré '+now,'ok'],
+    savedLocal:['✓ Enregistré en local '+now,'ok'],
+    conflict:['⚠️ Conflit — gardé sur ce navigateur','warn'],
+    uptodate:['✓ À jour','ok']
+  };
+  const [txt,cls]=map[s]||['',''];
+  el.textContent=txt; el.className='savest '+cls;
+}
+function scheduleAutosave(){
+  const name=$('dossierName').value.trim();
+  if(!name){ setSaveStatus('unnamed'); return; }
+  setSaveStatus('pending');
+  clearTimeout(_autosaveT);
+  _autosaveT=setTimeout(doAutosave, 1200); // sauvegarde 1,2 s après la dernière frappe
+}
+async function doAutosave(){
+  const name=$('dossierName').value.trim();
+  if(!name){ setSaveStatus('unnamed'); return; }
+  const st=currentState();
+  st.id = window._curId || ('d_'+Date.now());
+  window._curId = st.id;
+  // Garde-fou : un dossier qui avait des montants et devient vide
+  if(dossierCost(st)<=0 && (window._loadedCost||0)>0 && !window._emptyOK){
+    if(!confirm('⚠️ Ce dossier avait des montants et il est maintenant vide. Enregistrer quand même ?\n(Les anciennes valeurs restent récupérables dans l\'historique.)')){ setSaveStatus('pending'); return; }
+    window._emptyOK=true;
+  }
+  setSaveStatus('saving');
+  saveLocal(st); // miroir local systématique : 2e copie sur CE poste, quoi qu'il arrive
+  try{
+    if(API_OK){
+      const r=await apiFetch('',{method:'POST',body:JSON.stringify(st)});
+      if(r.status===401){ authRelogin(); setSaveStatus('savedLocal'); return; }
+      if(r.status===409){ setSaveStatus('conflict'); toast('⚠️ Ce dossier vient d\'être modifié par quelqu\'un d\'autre. Tes modifs sont gardées sur ce navigateur — recharge la liste pour voir la version à jour avant de continuer.'); return; }
+      const res=await r.json().catch(()=>null);
+      if(res&&res.updated) window._baseUpdated=res.updated;
+    }
+    setSaveStatus('saved'); loadList();
+  }catch(e){ setSaveStatus('savedLocal'); }
+}
+/* ---------- Sécurité multi-poste : récupération des données locales non synchronisées ---------- */
+function dossierCost(d){ let c=0; (d&&d.lines||[]).forEach(l=>{ c += (l.qty!=null)?(l.qty||0)*(l.pu||0):(l.amount||0); }); return c; }
+function recoverScan(kvArr){
+  const b=$('recoverBanner'); if(!b) return;
+  if(!API_OK){ b.style.display='none'; return; }
+  const kvById={}; (kvArr||[]).forEach(d=>{ if(d&&d.id) kvById[d.id]=d; });
+  const reco=localGet().filter(d=>{
+    const lc=dossierCost(d); if(lc<=0) return false;
+    const kv=kvById[d.id];
+    if(!kv) return true;                         // en local, absent de la base partagée
+    return lc - dossierCost(kv) > 1;             // local plus riche que la base
+  });
+  window._recoverable=reco;
+  if(!reco.length){ b.style.display='none'; return; }
+  b.style.display='block';
+  b.innerHTML='<div style="background:#fff8ec;border:1px solid #e6be6a;border-radius:11px;padding:12px 14px;margin-bottom:12px;font-size:13px;line-height:1.5">⚠️ <b>'+reco.length+' dossier(s) de CE navigateur ont des données absentes de la base partagée</b> (probable saisie en mode local) : '+reco.map(d=>'« '+escapeHtml(d.name)+' »').join(' · ')+'.<br><button class="btn sm" style="margin-top:8px" onclick="restoreLocal()">↩ Restaurer ces données dans la base partagée</button></div>';
+}
+async function restoreLocal(){
+  const list=window._recoverable||[]; if(!list.length) return;
+  if(!confirm('Restaurer '+list.length+' dossier(s) de ce navigateur vers la base partagée ?')) return;
+  for(const d of list){ try{ await apiFetch('',{method:'POST',body:JSON.stringify(Object.assign({},d,{force:true}))}); }catch(e){} }
+  toast('✅ Données restaurées dans la base partagée'); loadList();
+}
+async function checkApi(){
+  API_OK=false;
+  try{
+    const r=await apiFetch('',{method:'GET'});
+    if(r.status===401){ authRelogin(); return; }
+    if(r.ok){ API_OK=true; }
+  }catch(e){ API_OK=false; }
+  $('connBadge').textContent = API_OK?'base partagée':'hors ligne';
+  $('connBadge').className = 'conn '+(API_OK?'shared':'local');
+  const sc=$('savedScope'); if(sc) sc.textContent = API_OK?'(base partagée — ton espace)':'(local — ce navigateur)';
+  loadList();
+}
+function localGet(){ try{return JSON.parse(localStorage.getItem('kaoma_marge')||'[]');}catch(e){return [];} }
+function localSet(a){ localStorage.setItem('kaoma_marge',JSON.stringify(a)); }
+
+function currentState(){
+  return {
+    name: $('dossierName').value.trim() || 'Sans nom',
+    mode, lines: lines.map(l=>Object.assign({}, l, {amount: lineCost(l)})),
+    moLines: [], moMode: 'vente',
+    targetA: $('targetA').value, targetB: $('targetB').value,
+    pvB: $('pvB').value, nbRooms,
+    commRooms: $('commRooms')?$('commRooms').value:'', commSurface: $('commSurface')?$('commSurface').value:'',
+    chi, simpleDebours: $('simpleDebours')?$('simpleDebours').value:'',
+    baseUpdated: window._baseUpdated || '',
+    updated: new Date().toISOString()
+  };
+}
+async function saveDossier(){
+  const st=currentState();
+  st.id = window._curId || ('d_'+Date.now());
+  window._curId = st.id;
+  if(API_OK){
+    try{
+      const r=await apiFetch('',{method:'POST',body:JSON.stringify(st)});
+      if(r.status===401){ authRelogin(); saveLocal(st); return; }
+    }catch(e){ toast('Erreur réseau — enregistré en local'); saveLocal(st); return loadList(); }
+  } else { saveLocal(st); }
+  toast('💾 « '+st.name+' » enregistré'); loadList();
+}
+function saveLocal(st){ const a=localGet().filter(d=>d.id!==st.id); a.unshift(st); localSet(a); }
+
+async function loadList(){
+  let arr=[];
+  if(API_OK){ try{ const r=await apiFetch('',{method:'GET'}); if(r.status===401){ authRelogin(); return; } arr=await r.json(); if(!Array.isArray(arr)) arr=localGet(); }catch(e){ arr=localGet(); } }
+  else arr=localGet();
+  arr.sort((a,b)=>(b.updated||'').localeCompare(a.updated||''));
+  const el=$('savedList');
+  if(!arr.length){ el.innerHTML='<div class="saved-empty">Aucun dossier enregistré pour le moment.</div>'; return; }
+  el.innerHTML='';
+  arr.forEach(d=>{
+    // Coût + PV par lignes (fourniture + pose), sinon logique globale (ancien format)
+    let cost=0, pvArt=0, hasPerLine=false;
+    (d.lines||[]).forEach(l=>{
+      if(l.qty!=null||l.marginMode){ hasPerLine=true; const r=computeLine(l); cost+=r.cost; pvArt+=r.pv; }
+      else { cost+=parseNum(l.amount); }
+    });
+    let moC=0, moPV=0;
+    const moArr=d.moLines||(d.mo?[{cout:d.mo.cout,hours:d.mo.hours,vente:d.mo.vente,marge:d.mo.marge}]:[]);
+    const mm=d.moMode||(d.mo?d.mo.mode:'vente')||'vente';
+    moArr.forEach(l=>{ const c=parseNum(l.cout)*parseNum(l.hours); moC+=c;
+      let v; if(mm==='marge'){const m=parseNum(l.marge)/100; v=m<1?parseNum(l.cout)/(1-m):0;} else {v=parseNum(l.vente);} moPV+=v*parseNum(l.hours); });
+    const D=cost+moC;
+    let pv=0,marge=0,taux=0;
+    if(hasPerLine){ pv=pvArt+moPV; marge=pv-D; taux=pv>0?marge/pv:0; }
+    else if(d.mode==='A'){ const t=parseNum(d.targetA)/100; pv=t<1?D/(1-t):0; marge=pv-D; taux=t; }
+    else { pv=parseNum(d.pvB); marge=pv-D; taux=pv>0?marge/pv:0; }
+    const div=document.createElement('div'); div.className='saved-item';
+    div.innerHTML=`<div class="n">${escapeHtml(d.name)}</div>
+      <div class="m"><span>PV ${EUR.format(Math.round(pv))}</span><span class="pill">${(taux*100).toFixed(0)}% marge</span></div>
+      <div class="m"><span>Coût ${EUR.format(Math.round(D))}</span>
+        <button class="btn sm danger" onclick="event.stopPropagation();delDossier('${d.id}')">Suppr.</button></div>`;
+    div.onclick=()=>openDossier(d);
+    el.appendChild(div);
+  });
+  recoverScan(API_OK?arr:null);
+}
+function openDossier(d){
+  suppressAutosave=true;
+  window._curId=d.id; window._baseUpdated=d.updated||''; window._loadedCost=dossierCost(d); window._emptyOK=false;
+  $('dossierName').value=d.name==='Sans nom'?'':d.name;
+  // Articles : nouveau format (qty/pu/marge par ligne) sinon migration ancien format {label,type,amount}
+  // Pour l'ancien format, on répartit la marge effective du dossier sur chaque ligne (cible en mode A, marge réelle en mode B)
+  const _oldCost=(d.lines||[]).reduce((s,l)=>s+(l.qty!=null?(l.qty||0)*(l.pu||0):(l.amount||0)),0);
+  let _oldMoC=0; (d.moLines||(d.mo?[{cout:d.mo.cout,hours:d.mo.hours}]:[])).forEach(l=>_oldMoC+=parseNum(l.cout)*parseNum(l.hours));
+  const _Dold=_oldCost+_oldMoC;
+  let _effM=parseNum(d.targetA)||40;
+  if(d.mode!=='A'){ const _pvb=parseNum(d.pvB); if(_pvb>0) _effM=(_pvb-_Dold)/_pvb*100; }
+  if(!isFinite(_effM) || _effM>=95 || _Dold<=0) _effM=parseNum(d.targetA)||40; // garde-fou : évite marge 100% sur dossier à coûts 0
+  const _pd=()=>({poseH:0,poseCout:60,poseMode:'pct',posePct:15,poseEur:0,market:0}); // défauts pose (420€/j ≈ 60€/h, marge 15%) / marché
+  lines = (d.lines||defaultLines()).map(l=>{
+    if(l.qty!=null){
+      return Object.assign(_pd(), {label:l.label||'',type:l.type||'externe',qty:l.qty||0,pu:l.pu||0,
+              marginMode:l.marginMode||'pct',marginPct:l.marginPct!=null?l.marginPct:40,marginEur:l.marginEur||0,
+              poseH:l.poseH||0,poseCout:l.poseCout!=null?l.poseCout:60,poseMode:l.poseMode||'pct',posePct:l.posePct!=null?l.posePct:15,poseEur:l.poseEur||0,market:l.market||0,marketLow:l.marketLow||0,marketHigh:l.marketHigh||0});
+    }
+    return Object.assign(_pd(), {label:l.label||'',type:l.type||'externe',qty:1,pu:(l.amount||0),marginMode:'pct',marginPct:Math.round(_effM*100)/100,marginEur:0});
+  });
+  // MO ancien format (heures>0) → ajoutée en lignes-pose ; marge alignée sur la marge effective du dossier (cohérence PV)
+  const _pushMo=(ml,mode)=>{ if((parseNum(ml.hours)||0)>0){ const row=moLineToRow(ml,mode); row.posePct=Math.round(_effM*100)/100; lines.push(row); } };
+  if(d.moLines && d.moLines.length){ d.moLines.forEach(ml=>_pushMo(ml, d.moMode||'vente')); }
+  else if(d.mo){ _pushMo(d.mo, d.mo.mode||'vente'); }
+  $('targetA').value=d.targetA||40; $('targetB').value=d.targetB||40; $('pvB').value=d.pvB||'';
+  nbRooms=parseNum(d.nbRooms)||1; if($('nbRooms')) $('nbRooms').value=nbRooms;
+  if($('commRooms')) $('commRooms').value=d.commRooms||''; if($('commSurface')) $('commSurface').value=d.commSurface||'';
+  if($('simpleDebours')) $('simpleDebours').value=d.simpleDebours||''; chi=(d.chi==='hotel')?'detail':(d.chi||chi); applyChi();
+  setMode(d.mode||'A'); renderLines(); render();
+  suppressAutosave=false; setSaveStatus('uptodate');
+  toast('📂 « '+d.name+' » ouvert');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+async function delDossier(id){
+  if(!confirm('Supprimer ce dossier ?'))return;
+  if(API_OK){ try{ await apiFetch('&id='+encodeURIComponent(id),{method:'DELETE'}); }catch(e){} }
+  else { localSet(localGet().filter(d=>d.id!==id)); }
+  if(window._curId===id) window._curId=null;
+  loadList(); toast('Dossier supprimé');
+}
+function newDossier(){
+  suppressAutosave=true;
+  window._curId=null; window._baseUpdated=''; window._loadedCost=0; window._emptyOK=false;
+  $('dossierName').value=''; $('pvB').value=''; $('targetA').value=40; $('targetB').value=40;
+  nbRooms=1; if($('nbRooms')) $('nbRooms').value=1;
+  if($('commRooms')) $('commRooms').value=''; if($('commSurface')) $('commSurface').value='';
+  if($('simpleDebours')) $('simpleDebours').value='';
+  lines=defaultLines();
+  setMode('A'); renderLines(); render();
+  suppressAutosave=false; setSaveStatus('unnamed');
+  toast('Nouveau dossier');
+}
+
+/* ---------- Toast ---------- */
+let _tt;
+function toast(m){ const s=$('status'); s.textContent=m; s.classList.add('show'); clearTimeout(_tt); _tt=setTimeout(()=>s.classList.remove('show'),2400); }
+
+/* ---------- Confort de saisie : sélection auto au clic (plus besoin de supprimer) ---------- */
+document.addEventListener('focusin',e=>{ const t=e.target; if(t&&t.tagName==='INPUT'&&(t.type==='text'||t.getAttribute('inputmode')==='decimal')){ setTimeout(()=>{ try{ t.select(); }catch(_){ } },0); } });
+
+/* ================= AUTH KAOMA — login Google + espaces cloisonnés ================= */
+const GOOGLE_CLIENT_ID='897490379532-ta39a6sla6c03ur1ben03jpv6aqjrb7a.apps.googleusercontent.com';
+const AUTH={ idToken:null, email:null, espaces:[], espace:null, isAdmin:false };
+function apiFetch(extraQs, opts){
+  opts=opts||{}; const headers=Object.assign({'Content-Type':'application/json'}, opts.headers||{});
+  if(AUTH.idToken) headers['Authorization']='Bearer '+AUTH.idToken;
+  const url='/api/dossiers?espace='+encodeURIComponent(AUTH.espace||'')+(extraQs||'');
+  return fetch(url, Object.assign({}, opts, {headers}));
+}
+function authShow(s){ const o=$('authOverlay'); if(o) o.style.display=s?'flex':'none'; }
+function authError(msg){ const e=$('authError'); if(e){ e.style.display='block'; e.textContent=msg; } }
+function jwtInfo(tok){ try{ const p=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); return {email:p.email, exp:p.exp}; }catch(e){ return null; } }
+function showSignin(){ const ep=$('espacePicker'); if(ep) ep.style.display='none'; const s=$('authSignin'); if(s) s.style.display=''; $('authSub').textContent='Connecte-toi pour accéder à ton espace.'; }
+async function onGoogleCredential(resp){
+  const tok=resp&&resp.credential; if(!tok) return;
+  AUTH.idToken=tok; const i=jwtInfo(tok); AUTH.email=i?i.email:null;
+  try{ localStorage.setItem('kaoma_auth', JSON.stringify({idToken:tok})); }catch(e){}
+  await afterLogin();
+}
+async function afterLogin(){
+  $('authError').style.display='none';
+  let me=null;
+  try{ const r=await fetch('/api/dossiers?me=1',{headers:{'Authorization':'Bearer '+AUTH.idToken}});
+       if(r.status===401){ authError('Session expirée — reconnecte-toi.'); showSignin(); renderGoogleButton(); return; }
+       if(r.ok) me=await r.json(); }
+  catch(e){ authError('Problème réseau — réessaie.'); return; }
+  if(!me){ authError('Connexion impossible.'); return; }
+  AUTH.email=me.email; AUTH.espaces=me.espaces||[]; AUTH.isAdmin=!!me.isAdmin;
+  if(!AUTH.espaces.length){ authError('Le compte '+me.email+' n\'a accès à aucun espace. Contacte l\'administrateur.'); $('authLogout').style.display='inline-block'; $('authSignin').style.display='none'; return; }
+  let saved=null; try{ saved=localStorage.getItem('kaoma_espace'); }catch(e){}
+  if(AUTH.espaces.length===1){ return setEspace(AUTH.espaces[0].id); }
+  if(saved && AUTH.espaces.some(e=>e.id===saved)){ return setEspace(saved); }
+  showPicker();
+}
+function showPicker(){
+  $('authSub').textContent='Choisis ton espace :';
+  $('authSignin').style.display='none';
+  const p=$('espacePicker'); p.style.display='flex'; p.innerHTML='';
+  AUTH.espaces.forEach(e=>{ const b=document.createElement('button'); b.className='espace-btn'; b.textContent=e.name; b.onclick=()=>setEspace(e.id); p.appendChild(b); });
+  $('authLogout').style.display='inline-block';
+}
+function setEspace(id){
+  AUTH.espace=id; try{ localStorage.setItem('kaoma_espace', id); }catch(e){}
+  const e=AUTH.espaces.find(x=>x.id===id); const nm=e?e.name:id;
+  const chip=$('espaceChip');
+  if(chip){ chip.style.display='inline';
+    chip.innerHTML='Espace <b>'+escapeHtml(nm)+'</b> · '+escapeHtml(AUTH.email||'')
+      +' · <a href="#" onclick="openAuthMenu();return false;">changer</a>'
+      +(AUTH.isAdmin?' · <a href="#" onclick="adminEspaces();return false;">🏢 KAOMA</a>':''); }
+  authShow(false);
+  checkApi();
+}
+function openAuthMenu(){ authShow(true); $('authError').style.display='none'; $('authLogout').style.display='inline-block'; if(AUTH.espaces.length>1) showPicker(); else showSignin(); }
+function authRelogin(){ API_OK=false; authShow(true); $('authError').style.display='none'; showSignin(); renderGoogleButton(); toast('Session expirée — reconnecte-toi.'); }
+function authLogout(){ AUTH.idToken=AUTH.email=AUTH.espace=null; AUTH.espaces=[]; try{ localStorage.removeItem('kaoma_auth'); localStorage.removeItem('kaoma_espace'); }catch(e){} try{ google.accounts.id.disableAutoSelect(); }catch(e){} location.reload(); }
+async function adminEspaces(){
+  if(!AUTH.isAdmin) return;
+  try{ const r=await fetch('/api/dossiers?admin=1',{headers:{'Authorization':'Bearer '+AUTH.idToken}});
+    if(!r.ok){ toast('Accès admin refusé'); return; }
+    const list=await r.json();
+    authShow(true); $('authSignin').style.display='none'; $('authError').style.display='none';
+    $('authSub').textContent='KAOMA — sociétés & espaces';
+    const p=$('espacePicker'); p.style.display='flex'; p.innerHTML='';
+    list.forEach(e=>{ const d=document.createElement('div'); d.className='espace-btn'; d.style.cursor='default';
+      d.innerHTML='<b>'+escapeHtml(e.name)+'</b> — '+e.dossiers+' dossier(s)<br><span style="font-size:11px;color:#6b6b72;font-weight:400">'+e.users.map(escapeHtml).join(', ')+'</span>'; p.appendChild(d); });
+    const imp=document.createElement('div'); imp.style.cssText='margin-top:12px;font-size:12px;color:#6b6b72;text-align:left';
+    imp.innerHTML='Importer un fichier JSON dans <b>Blomkål</b> :<br><input type="file" id="impFile" accept="application/json,.json" style="margin-top:6px;font-size:12px"> <button class="espace-btn" style="padding:8px 12px;margin-top:8px;width:auto;display:inline-block" onclick="importSeed(\'blomkal\')">Importer</button>';
+    p.appendChild(imp);
+    const back=document.createElement('button'); back.className='auth-logout'; back.textContent='← Retour à l\'app'; back.onclick=()=>{ authShow(false); }; p.appendChild(back);
+  }catch(e){ toast('Erreur'); }
+}
+async function importSeed(esp){
+  const f=$('impFile'); if(!f||!f.files||!f.files[0]){ toast('Choisis un fichier JSON'); return; }
+  try{
+    const txt=await f.files[0].text(); const arr=JSON.parse(txt);
+    if(!Array.isArray(arr)){ toast('Le fichier doit être un tableau JSON'); return; }
+    if(!confirm('Importer '+arr.length+' dossier(s) dans l\'espace « '+esp+' » ?')) return;
+    const r=await fetch('/api/dossiers?import='+encodeURIComponent(esp),{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.idToken},body:JSON.stringify(arr)});
+    const res=await r.json().catch(()=>null);
+    if(r.ok&&res&&res.ok){ toast('✅ '+res.imported+' dossier(s) importé(s) dans '+esp); authShow(false); if(AUTH.espace===esp) checkApi(); }
+    else toast('Import refusé ('+((res&&res.error)||r.status)+')');
+  }catch(e){ toast('Fichier illisible'); }
+}
+function renderGoogleButton(){
+  const tryInit=()=>{
+    if(!(window.google&&google.accounts&&google.accounts.id)){ return setTimeout(tryInit,200); }
+    try{ google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleCredential, auto_select:false }); }catch(e){}
+    const el=$('authSignin'); el.style.display=''; el.innerHTML='';
+    try{ google.accounts.id.renderButton(el, { theme:'filled_blue', size:'large', text:'signin_with', shape:'pill', width:260 }); }catch(e){}
+  };
+  tryInit();
+}
+function initAuth(){
+  authShow(true);
+  let stored=null; try{ stored=JSON.parse(localStorage.getItem('kaoma_auth')||'null'); }catch(e){}
+  if(stored && stored.idToken){ const i=jwtInfo(stored.idToken); if(i && i.exp && i.exp*1000>Date.now()+30000){ AUTH.idToken=stored.idToken; AUTH.email=i.email; afterLogin(); return; } }
+  renderGoogleButton();
+}
+
+/* ---------- Init ---------- */
+lines=defaultLines();
+try{ chi=localStorage.getItem('kaoma_chi')||'detail'; }catch(e){ chi='detail'; }
+if(chi==='hotel') chi='detail'; // Hôtel/DPGF fusionné dans Chiffrage détaillé
+try{ colsEss=(localStorage.getItem('kaoma_cols')||'ess')==='ess'; }catch(e){ colsEss=true; }
+populatePosteSuggest();
+applyChi();
+suppressAutosave=true;
+renderLines(); render();
+applyCols();
+suppressAutosave=false;
+initAuth();
+</script>
+</body>
+</html>
