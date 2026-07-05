@@ -428,6 +428,11 @@
   .k-events{display:flex;flex-direction:column;gap:6px}
   .k-ev{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;background:#fff;border:1px solid #e6ddcc;border-radius:11px;padding:8px 12px;font-size:12px}
   .k-ev-t{font-weight:700;color:#1a1a1f} .k-ev-u{color:#6a3fe6;font-weight:600} .k-ev-d{color:#6b6b72;flex:1;min-width:80px} .k-ev-w{color:#9297a0;font-size:11px}
+  .k-support{background:#fdf1dc!important;border-color:#e0b950!important;color:#9a6a00!important}
+  .k-support:hover{background:#f9e6bf!important}
+  .support-banner{background:#fdf1dc;border-bottom:1px solid #e0b950;color:#7a5400;padding:8px 16px;font-size:13px;font-weight:600;text-align:center;position:sticky;top:0;z-index:60}
+  .support-banner button{margin-left:12px;background:#9a6a00;color:#fff;border:0;border-radius:9999px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+  .support-banner button:hover{background:#7a5400}
 </style>
 </head>
 <body>
@@ -450,7 +455,7 @@
 <div id="kaomaOverlay" class="kaoma-overlay">
   <div class="kaoma-panel">
     <div class="kaoma-head">
-      <div><div class="kaoma-title">🏢 KAOMA — vos sociétés</div><div class="kaoma-subt">Vue d'ensemble des espaces connectés · réservé à toi</div></div>
+      <div><div class="kaoma-title" id="kaomaTitle">🏢 KAOMA — Administration</div><div class="kaoma-subt" id="kaomaSubt">Console fondateur · toutes les sociétés · réservé à toi</div></div>
       <button class="kaoma-x" onclick="kaomaClose()">✕</button>
     </div>
     <div id="kaomaBody"></div>
@@ -1279,7 +1284,7 @@ document.addEventListener('focusin',e=>{ const t=e.target; if(t&&t.tagName==='IN
 
 /* ================= AUTH KAOMA — login Google + espaces cloisonnés ================= */
 const GOOGLE_CLIENT_ID='897490379532-ta39a6sla6c03ur1ben03jpv6aqjrb7a.apps.googleusercontent.com';
-const AUTH={ idToken:null, email:null, espaces:[], espace:null, isAdmin:false };
+const AUTH={ idToken:null, email:null, espaces:[], espace:null, isAdmin:false, tenantAdmin:[], allEspaces:[], supportMode:false, supportName:'' };
 function apiFetch(extraQs, opts){
   opts=opts||{}; const headers=Object.assign({'Content-Type':'application/json'}, opts.headers||{});
   if(AUTH.idToken) headers['Authorization']='Bearer '+AUTH.idToken;
@@ -1304,7 +1309,7 @@ async function afterLogin(){
        if(r.ok) me=await r.json(); }
   catch(e){ authError('Problème réseau — réessaie.'); return; }
   if(!me){ authError('Connexion impossible.'); return; }
-  AUTH.email=me.email; AUTH.espaces=me.espaces||[]; AUTH.isAdmin=!!me.isAdmin;
+  AUTH.email=me.email; AUTH.espaces=me.espaces||[]; AUTH.isAdmin=!!me.isAdmin; AUTH.tenantAdmin=me.tenantAdmin||[]; AUTH.allEspaces=me.allEspaces||[];
   if(!AUTH.espaces.length){ authError('Le compte '+me.email+' n\'a accès à aucun espace. Contacte l\'administrateur.'); $('authLogout').style.display='inline-block'; $('authSignin').style.display='none'; return; }
   let saved=null; try{ saved=localStorage.getItem('kaoma_espace'); }catch(e){}
   if(AUTH.espaces.length===1){ return setEspace(AUTH.espaces[0].id); }
@@ -1327,7 +1332,8 @@ function setEspace(id){
       +'<div id="espaceMenu" class="espace-menu" hidden>'
       +'<div class="em-head">'+escapeHtml(AUTH.email||'')+'</div>'
       +(AUTH.espaces.length>1?'<button class="em-item" onclick="emPick()">🔄 Changer d\'espace</button>':'')
-      +(AUTH.isAdmin?'<button class="em-item" onclick="emAdmin()">🏢 Sociétés (vue KAOMA)</button>':'')
+      +((AUTH.tenantAdmin&&AUTH.tenantAdmin.length)?'<button class="em-item" onclick="emTenant()">📊 Ma société</button>':'')
+      +(AUTH.isAdmin?'<button class="em-item" onclick="emAdmin()">🏢 KAOMA — Administration</button>':'')
       +'<button class="em-item danger" onclick="authLogout()">🚪 Se déconnecter</button>'
       +'</div>'; }
   authShow(false);
@@ -1344,6 +1350,7 @@ function authLogout(){ AUTH.idToken=AUTH.email=AUTH.espace=null; AUTH.espaces=[]
 async function adminEspaces(){
   if(!AUTH.isAdmin) return;
   const ov=$('kaomaOverlay'), body=$('kaomaBody'); if(!ov||!body) return;
+  if($('kaomaTitle')){ $('kaomaTitle').textContent='🏢 KAOMA — Administration'; $('kaomaSubt').textContent='Console fondateur · toutes les sociétés · réservé à toi'; }
   ov.style.display='flex'; body.innerHTML='<div class="k-load">Chargement…</div>';
   try{
     const H={'Authorization':'Bearer '+AUTH.idToken};
@@ -1363,7 +1370,7 @@ async function adminEspaces(){
       const taux=pv>0?marge/pv*100:0;
       const lastTxt=last?new Date(last).toLocaleDateString('fr-FR'):'—';
       const canOpen=AUTH.espaces.some(x=>x.id===id);
-      return '<div class="k-card"><div class="k-card-h"><span class="k-name">🏢 '+escapeHtml(e.name||id)+'</span>'+(canOpen?'<button class="k-open" onclick="kaomaOpen(\''+id+'\')">Ouvrir →</button>':'')+'</div>'
+      return '<div class="k-card"><div class="k-card-h"><span class="k-name">🏢 '+escapeHtml(e.name||id)+'</span>'+(canOpen?'<button class="k-open" onclick="kaomaOpen(\''+id+'\')">Ouvrir →</button>':'<button class="k-open k-support" onclick="kaomaSupport(\''+id+'\')">🛟 Support →</button>')+'</div>'
         +'<div class="k-metrics"><div class="k-m"><span>Chiffrages</span><b>'+ds.length+'</b></div><div class="k-m"><span>CA chiffré</span><b>'+EUR.format(Math.round(pv))+'</b></div><div class="k-m mg"><span>Marge</span><b>'+EUR.format(Math.round(marge))+'</b></div><div class="k-m"><span>Taux</span><b>'+taux.toFixed(1).replace('.',',')+' %</b></div></div>'
         +'<div class="k-foot">👥 '+((e.users||[]).map(escapeHtml).join(', ')||'—')+' · dernière activité '+lastTxt+'</div></div>';
     }).join('');
@@ -1415,6 +1422,49 @@ function kaomaExport(){
     setTimeout(()=>URL.revokeObjectURL(a.href),3000); toast('⬇︎ Sauvegarde complète exportée');
   }catch(e){ toast('Export impossible'); }
 }
+/* ---- Niveau 2 : cockpit « Ma société » (responsable d'une société cliente) ---- */
+function emTenant(){ closeEspaceMenu(); tenantCockpit(); }
+async function tenantCockpit(){
+  const mine=AUTH.tenantAdmin||[]; if(!mine.length) return;
+  const ov=$('kaomaOverlay'), body=$('kaomaBody'); if(!ov||!body) return;
+  if($('kaomaTitle')){ $('kaomaTitle').textContent='📊 Ma société'; $('kaomaSubt').textContent='Vue d\'ensemble de ta société'; }
+  ov.style.display='flex'; body.innerHTML='<div class="k-load">Chargement…</div>';
+  try{
+    const data=await fetch('/api/dossiers?tenant=data',{headers:{'Authorization':'Bearer '+AUTH.idToken}}).then(r=>r.ok?r.json():{});
+    const ids=Object.keys(data); let TC=0,TPV=0,TM=0;
+    const cards=ids.map(id=>{
+      const e=data[id]||{}; const ds=e.dossiers||[]; let pv=0,marge=0,last='';
+      ds.forEach(d=>{ const t=computeDossierTotals(d); pv+=t.pv; marge+=t.marge; if((d.updated||'')>last) last=d.updated||''; });
+      TC+=ds.length; TPV+=pv; TM+=marge; const taux=pv>0?marge/pv*100:0;
+      const canOpen=AUTH.espaces.some(x=>x.id===id);
+      return '<div class="k-card"><div class="k-card-h"><span class="k-name">🏢 '+escapeHtml(e.name||id)+'</span>'+(canOpen?'<button class="k-open" onclick="kaomaOpen(\''+id+'\')">Ouvrir →</button>':'')+'</div>'
+        +'<div class="k-metrics"><div class="k-m"><span>Chiffrages</span><b>'+ds.length+'</b></div><div class="k-m"><span>CA chiffré</span><b>'+EUR.format(Math.round(pv))+'</b></div><div class="k-m mg"><span>Marge</span><b>'+EUR.format(Math.round(marge))+'</b></div><div class="k-m"><span>Taux</span><b>'+taux.toFixed(1).replace('.',',')+' %</b></div></div></div>';
+    }).join('');
+    const totTaux=TPV>0?TM/TPV*100:0;
+    body.innerHTML='<div class="k-total"><div><span>Chiffrages</span><b>'+TC+'</b></div><div><span>CA chiffré</span><b>'+EUR.format(Math.round(TPV))+'</b></div><div class="mg"><span>Marge totale</span><b>'+EUR.format(Math.round(TM))+' · '+totTaux.toFixed(1).replace('.',',')+'%</b></div></div><div class="k-grid">'+cards+'</div>';
+  }catch(e){ body.innerHTML='<div class="k-err">Erreur de chargement.</div>'; }
+}
+/* ---- Mode support (fondateur qui entre chez un client pour dépanner — TRACÉ) ---- */
+function kaomaSupport(id){
+  const nm=(window._kaomaData&&window._kaomaData[id]&&window._kaomaData[id].name)||id;
+  if(!confirm('Mode support : tu vas accéder aux données de « '+nm+' » pour dépanner.\nCet accès est TRACÉ (journalisé). Continuer ?')) return;
+  kaomaClose(); setEspaceSupport(id, nm);
+}
+function setEspaceSupport(id, nm){
+  AUTH.espace=id; AUTH.supportMode=true; AUTH.supportName=nm;
+  try{ localStorage.removeItem('kaoma_espace'); }catch(e){}
+  const chip=$('espaceChip'); if(chip){ chip.style.display='inline-block';
+    chip.innerHTML='<button class="espace-btn2" style="border-color:#e0b950;color:#9a6a00;background:#fdf1dc" onclick="toggleEspaceMenu(event)">🛟 <b>'+escapeHtml(nm)+'</b> · support <span class="caret">▾</span></button>'
+     +'<div id="espaceMenu" class="espace-menu" hidden><div class="em-head">'+escapeHtml(AUTH.email||'')+'</div><button class="em-item" onclick="exitSupport()">↩ Quitter le mode support</button>'+(AUTH.isAdmin?'<button class="em-item" onclick="emAdmin()">🏢 KAOMA — Administration</button>':'')+'<button class="em-item danger" onclick="authLogout()">🚪 Se déconnecter</button></div>'; }
+  showSupportBanner(nm); checkApi();
+}
+function showSupportBanner(nm){
+  let b=$('supportBanner'); if(!b){ b=document.createElement('div'); b.id='supportBanner'; b.className='support-banner'; document.body.insertBefore(b, document.body.firstChild); }
+  b.innerHTML='🛟 <b>Mode support</b> — tu consultes les données de « '+escapeHtml(nm)+' » · accès journalisé <button onclick="exitSupport()">Quitter le support</button>';
+  b.style.display='block';
+}
+function exitSupport(){ AUTH.supportMode=false; AUTH.supportName=''; const b=$('supportBanner'); if(b) b.style.display='none';
+  if(AUTH.espaces&&AUTH.espaces.length){ setEspace(AUTH.espaces[0].id); } else { location.reload(); } }
 function kaomaOpen(id){ kaomaClose(); if(AUTH.espaces.some(x=>x.id===id)) setEspace(id); }
 function kaomaClose(){ const o=$('kaomaOverlay'); if(o) o.style.display='none'; }
 function computeDossierTotals(d){

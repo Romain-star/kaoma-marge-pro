@@ -1,11 +1,13 @@
 // KAOMA Marge PRO — Worker (Cloudflare Pages, _worker.js)
 // Sert le statique + API /api/dossiers. Multi-société (login Google + espaces cloisonnés).
-// Socle plateforme : journal d'événements + suivi utilisateurs (cockpit KAOMA).
+// Socle plateforme : journal d'événements + suivi utilisateurs + cockpit KAOMA + mode support tracé.
 //
-// CONFIG (variables d'env Cloudflare, hors code) : GOOGLE_CLIENT_ID, SUPER_ADMIN, ACL_JSON.
+// CONFIG (variables d'env Cloudflare, hors code) :
+//   GOOGLE_CLIENT_ID, SUPER_ADMIN, ACL_JSON (email -> [espaces]),
+//   TENANT_ADMINS (optionnel) = {"patron@societe.fr":["espaceX"]}  (responsables d'UNE société)
 //
-// RÈGLE ANTI-RÉÉCRITURE (croissance sans tout refaire) : TOUT l'accès données passe par `store`
-// (get/put/list/del). Pour passer de KV à une vraie base (D1/Postgres/par-pays) : ne réécrire QUE `store`.
+// RÈGLE ANTI-RÉÉCRITURE : TOUT l'accès données passe par `store` (get/put/list/del).
+// Pour migrer KV -> vraie base (D1/Postgres/par-pays) : ne réécrire QUE `store`.
 
 const DEFAULT_CLIENT_ID = '897490379532-ta39a6sla6c03ur1ben03jpv6aqjrb7a.apps.googleusercontent.com';
 const ESPACES = { blomkal: { name: 'Blomkål' }, woox: { name: 'WOOX' } };
@@ -13,11 +15,12 @@ const HIST_MAX = 40;
 const HIST_TTL = 60 * 60 * 24 * 120;   // 120 j (historique dossiers)
 const EVT_TTL  = 60 * 60 * 24 * 180;   // 180 j (événements)
 const LOGIN_THROTTLE = 30 * 60 * 1000; // 30 min entre 2 connexions comptées
+const SUPPORT_THROTTLE = 30 * 60 * 1000; // 30 min entre 2 traces d'accès support
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 
-// ---- Couche données découplée (le seul endroit à changer pour migrer KV -> vraie base) ----
+// ---- Couche données découplée (seul endroit à changer pour migrer KV -> vraie base) ----
 function makeStore(env) {
   const kv = env && env.DOSSIERS;
   return {
@@ -30,18 +33,21 @@ function makeStore(env) {
 }
 
 function config(env) {
-  let acl = {};
-  try { if (env && env.ACL_JSON) acl = JSON.parse(env.ACL_JSON); } catch (e) { acl = {}; }
+  let acl = {}; try { if (env && env.ACL_JSON) acl = JSON.parse(env.ACL_JSON); } catch (e) { acl = {}; }
   const lc = {}; for (const k in acl) lc[String(k).toLowerCase()] = acl[k];
+  let ta = {}; try { if (env && env.TENANT_ADMINS) ta = JSON.parse(env.TENANT_ADMINS); } catch (e) { ta = {}; }
+  const lta = {}; for (const k in ta) lta[String(k).toLowerCase()] = ta[k];
   return {
     clientId: (env && env.GOOGLE_CLIENT_ID) || DEFAULT_CLIENT_ID,
     superAdmin: String((env && env.SUPER_ADMIN) || '').toLowerCase(),
     acl: lc,
+    tenantAdmins: lta,
   };
 }
 const espaceOk = (user, espace) => !!espace && user && user.espaces.indexOf(espace) >= 0;
 const dkey = (espace, id) => 'dossier:' + espace + ':' + id;
 const hpref = (espace, id) => 'hist:' + espace + ':' + id + ':';
+const espName = (e) => (ESPACES[e] && ESPACES[e].name) || e;
 const clientMeta = (request) => ({ ip: request.headers.get('CF-Connecting-IP') || '', ua: (request.headers.get('User-Agent') || '').slice(0, 140), pays: (request.cf && request.cf.country) || '' });
 
 async function getUser(request, env) {
@@ -58,22 +64,19 @@ async function getUser(request, env) {
     if (!(d.email_verified === true || d.email_verified === 'true')) return null;
     if (d.exp && Number(d.exp) * 1000 < Date.now()) return null;
     const email = String(d.email).toLowerCase();
-    return { email, espaces: cfg.acl[email] || [], isAdmin: email === cfg.superAdmin, cfg };
+    return { email, espaces: cfg.acl[email] || [], isAdmin: email === cfg.superAdmin, tenantAdmin: cfg.tenantAdmins[email] || [], cfg };
   } catch (e) { return null; }
 }
 
-// ---- Socle événements (append-only, format portable -> exportable PostHog/entrepôt) ----
+// ---- Socle événements (append-only, portable) ----
 async function logEvent(store, type, email, meta) {
   if (!store.ok) return;
   const ts = new Date().toISOString();
-  const key = 'event:' + ts + ':' + Math.random().toString(36).slice(2, 8);
-  try { await store.put(key, JSON.stringify({ ts, type, email: email || '', meta: meta || {} }), { expirationTtl: EVT_TTL }); } catch (e) {}
+  try { await store.put('event:' + ts + ':' + Math.random().toString(36).slice(2, 8), JSON.stringify({ ts, type, email: email || '', meta: meta || {} }), { expirationTtl: EVT_TTL }); } catch (e) {}
 }
-// Marque l'utilisateur ; si nouvelle connexion (throttle 30 min) -> +1 login et event 'login'
 async function touchUser(store, email, espaces, meta) {
   if (!store.ok || !email) return;
-  let u = null;
-  try { const raw = await store.get('user:' + email); if (raw) u = JSON.parse(raw); } catch (e) {}
+  let u = null; try { const raw = await store.get('user:' + email); if (raw) u = JSON.parse(raw); } catch (e) {}
   const now = Date.now();
   const isNew = !u || !u.lastLogin || (now - new Date(u.lastLogin).getTime() > LOGIN_THROTTLE);
   u = u || { email: email, firstSeen: new Date().toISOString(), logins: 0 };
@@ -84,6 +87,20 @@ async function touchUser(store, email, espaces, meta) {
   try { await store.put('user:' + email, JSON.stringify(u)); } catch (e) {}
   if (isNew) await logEvent(store, 'login', email, meta);
 }
+// Trace un accès support (super-admin qui entre dans un espace dont il n'est PAS membre), throttlé
+async function maybeLogSupport(store, email, espace) {
+  const k = 'support:' + email + ':' + espace;
+  let last = 0; try { const raw = await store.get(k); if (raw) last = Number(raw) || 0; } catch (e) {}
+  if (Date.now() - last > SUPPORT_THROTTLE) {
+    try { await store.put(k, String(Date.now()), { expirationTtl: 60 * 60 * 24 * 7 }); } catch (e) {}
+    await logEvent(store, 'support_access', email, { espace: espace });
+  }
+}
+// Accès autorisé à un espace ? (membre, OU super-admin en mode support)
+function accessInfo(user, espace) {
+  const member = espaceOk(user, espace);
+  return { allowed: member || (user.isAdmin && !!ESPACES[espace]), member: member, support: !member && user.isAdmin && !!ESPACES[espace] };
+}
 
 async function handleGet(request, env, url) {
   const store = makeStore(env);
@@ -92,7 +109,27 @@ async function handleGet(request, env, url) {
 
   if (url.searchParams.get('me')) {
     await touchUser(store, user.email, user.espaces, clientMeta(request));
-    return json({ email: user.email, espaces: user.espaces.map((e) => ({ id: e, name: (ESPACES[e] && ESPACES[e].name) || e })), isAdmin: user.isAdmin });
+    return json({
+      email: user.email,
+      espaces: user.espaces.map((e) => ({ id: e, name: espName(e) })),
+      isAdmin: user.isAdmin,
+      tenantAdmin: user.tenantAdmin.map((e) => ({ id: e, name: espName(e) })),
+      allEspaces: user.isAdmin ? Object.keys(ESPACES).map((e) => ({ id: e, name: espName(e) })) : [],
+    });
+  }
+
+  // Cockpit responsable de société (niveau 2) : agrégats de SES sociétés uniquement
+  if (url.searchParams.get('tenant') === 'data') {
+    const mine = user.tenantAdmin || [];
+    if (!mine.length) return json({ error: 'réservé responsable de société' }, 403);
+    if (!store.ok) return json({}, 200);
+    const out = {};
+    for (const e of mine) {
+      const list = await store.list('dossier:' + e + ':');
+      const items = await Promise.all(list.keys.map(async (k) => { const v = await store.get(k.name); try { return JSON.parse(v); } catch { return null; } }));
+      out[e] = { name: espName(e), dossiers: items.filter(Boolean) };
+    }
+    return json(out);
   }
 
   const adminParam = url.searchParams.get('admin');
@@ -115,21 +152,23 @@ async function handleGet(request, env, url) {
       for (const e of Object.keys(ESPACES)) {
         const list = await store.list('dossier:' + e + ':');
         const items = await Promise.all(list.keys.map(async (k) => { const v = await store.get(k.name); try { return JSON.parse(v); } catch { return null; } }));
-        out[e] = { name: ESPACES[e].name, users: Object.keys(user.cfg.acl).filter((mm) => user.cfg.acl[mm].indexOf(e) >= 0), dossiers: items.filter(Boolean) };
+        out[e] = { name: espName(e), users: Object.keys(user.cfg.acl).filter((mm) => user.cfg.acl[mm].indexOf(e) >= 0), dossiers: items.filter(Boolean) };
       }
       return json(out);
     }
     const out = [];
     for (const e of Object.keys(ESPACES)) {
       const list = await store.list('dossier:' + e + ':');
-      out.push({ espace: e, name: ESPACES[e].name, dossiers: list.keys.length, users: Object.keys(user.cfg.acl).filter((mm) => user.cfg.acl[mm].indexOf(e) >= 0) });
+      out.push({ espace: e, name: espName(e), dossiers: list.keys.length, users: Object.keys(user.cfg.acl).filter((mm) => user.cfg.acl[mm].indexOf(e) >= 0) });
     }
     return json(out);
   }
 
   const espace = url.searchParams.get('espace');
-  if (!espaceOk(user, espace)) return json({ error: 'accès refusé à cet espace' }, 403);
+  const acc = accessInfo(user, espace);
+  if (!acc.allowed) return json({ error: 'accès refusé à cet espace' }, 403);
   if (!store.ok) return json([], 200);
+  if (acc.support) await maybeLogSupport(store, user.email, espace);
   const histId = url.searchParams.get('history');
   if (histId) {
     const list = await store.list(hpref(espace, histId));
@@ -159,7 +198,8 @@ async function handlePost(request, env, url) {
     return json({ ok: true, imported: n, espace: importEsp });
   }
   const espace = url.searchParams.get('espace');
-  if (!espaceOk(user, espace)) return json({ error: 'accès refusé à cet espace' }, 403);
+  const acc = accessInfo(user, espace);
+  if (!acc.allowed) return json({ error: 'accès refusé à cet espace' }, 403);
   let d; try { d = await request.json(); } catch { return json({ error: 'JSON invalide' }, 400); }
   if (!d || !d.id) return json({ error: 'id manquant' }, 400);
   const baseUpdated = d.baseUpdated; const force = d.force === true;
@@ -178,7 +218,8 @@ async function handlePost(request, env, url) {
   }
   d.updated = new Date().toISOString();
   await store.put(k, JSON.stringify(d));
-  await logEvent(store, 'dossier_save', user.email, { espace: espace, id: d.id, name: (d.name || '').slice(0, 60) });
+  if (acc.support) await logEvent(store, 'support_access', user.email, { espace: espace, action: 'modif', id: d.id });
+  else await logEvent(store, 'dossier_save', user.email, { espace: espace, id: d.id, name: (d.name || '').slice(0, 60) });
   return json({ ok: true, id: d.id, updated: d.updated });
 }
 
@@ -188,13 +229,14 @@ async function handleDelete(request, env, url) {
   if (!user) return json({ error: 'non authentifié' }, 401);
   if (!store.ok) return json({ error: 'KV non configuré' }, 503);
   const espace = url.searchParams.get('espace');
-  if (!espaceOk(user, espace)) return json({ error: 'accès refusé à cet espace' }, 403);
+  const acc = accessInfo(user, espace);
+  if (!acc.allowed) return json({ error: 'accès refusé à cet espace' }, 403);
   const id = url.searchParams.get('id');
   if (!id) return json({ error: 'id manquant' }, 400);
   const k = dkey(espace, id);
   try { const prevRaw = await store.get(k); if (prevRaw) await store.put(hpref(espace, id) + 'deleted:' + new Date().toISOString(), prevRaw, { expirationTtl: HIST_TTL }); } catch {}
   await store.del(k);
-  await logEvent(store, 'dossier_delete', user.email, { espace: espace, id: id });
+  await logEvent(store, acc.support ? 'support_access' : 'dossier_delete', user.email, { espace: espace, id: id, action: acc.support ? 'suppression' : undefined });
   return json({ ok: true });
 }
 
