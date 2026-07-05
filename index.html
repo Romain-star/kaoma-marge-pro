@@ -418,6 +418,16 @@
   .k-foot{margin-top:11px;color:#6b6b72;font-size:11px;word-break:break-word}
   .k-import{margin-top:16px;padding-top:14px;border-top:1px solid #e6ddcc;font-size:12px;color:#6b6b72}
   .k-import input{font-size:12px}
+  .k-sec{font-family:'Inter Tight',sans-serif;font-weight:800;font-size:15px;color:#1a1a1f;margin:20px 0 10px}
+  .k-empty{color:#6b6b72;font-size:13px;padding:10px 0}
+  .k-tw{overflow-x:auto;border:1px solid #e6ddcc;border-radius:14px;background:#fff}
+  .k-table{width:100%;border-collapse:collapse;font-size:13px}
+  .k-table th{text-align:left;color:#6b6b72;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.02em;padding:10px 12px;border-bottom:1px solid #f0ece2;background:#faf7f0}
+  .k-table td{padding:10px 12px;border-bottom:1px solid #f3ede1;color:#1a1a1f}
+  .k-table tr:last-child td{border-bottom:0}
+  .k-events{display:flex;flex-direction:column;gap:6px}
+  .k-ev{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;background:#fff;border:1px solid #e6ddcc;border-radius:11px;padding:8px 12px;font-size:12px}
+  .k-ev-t{font-weight:700;color:#1a1a1f} .k-ev-u{color:#6a3fe6;font-weight:600} .k-ev-d{color:#6b6b72;flex:1;min-width:80px} .k-ev-w{color:#9297a0;font-size:11px}
 </style>
 </head>
 <body>
@@ -1336,9 +1346,14 @@ async function adminEspaces(){
   const ov=$('kaomaOverlay'), body=$('kaomaBody'); if(!ov||!body) return;
   ov.style.display='flex'; body.innerHTML='<div class="k-load">Chargement…</div>';
   try{
-    const r=await fetch('/api/dossiers?admin=data',{headers:{'Authorization':'Bearer '+AUTH.idToken}});
-    if(!r.ok){ body.innerHTML='<div class="k-err">Accès refusé.</div>'; return; }
-    const data=await r.json(); const ids=Object.keys(data);
+    const H={'Authorization':'Bearer '+AUTH.idToken};
+    const [data,users,events]=await Promise.all([
+      fetch('/api/dossiers?admin=data',{headers:H}).then(r=>r.ok?r.json():{}),
+      fetch('/api/dossiers?admin=users',{headers:H}).then(r=>r.ok?r.json():[]),
+      fetch('/api/dossiers?admin=events',{headers:H}).then(r=>r.ok?r.json():[])
+    ]);
+    window._kaomaData=data;
+    const ids=Object.keys(data); const NM={}; ids.forEach(id=>NM[id]=(data[id]&&data[id].name)||id);
     let TC=0,TPV=0,TM=0;
     const cards=ids.map(id=>{
       const e=data[id]||{}; const ds=e.dossiers||[];
@@ -1348,27 +1363,57 @@ async function adminEspaces(){
       const taux=pv>0?marge/pv*100:0;
       const lastTxt=last?new Date(last).toLocaleDateString('fr-FR'):'—';
       const canOpen=AUTH.espaces.some(x=>x.id===id);
-      return '<div class="k-card">'
-        +'<div class="k-card-h"><span class="k-name">🏢 '+escapeHtml(e.name||id)+'</span>'+(canOpen?'<button class="k-open" onclick="kaomaOpen(\''+id+'\')">Ouvrir →</button>':'')+'</div>'
-        +'<div class="k-metrics">'
-          +'<div class="k-m"><span>Chiffrages</span><b>'+ds.length+'</b></div>'
-          +'<div class="k-m"><span>CA chiffré</span><b>'+EUR.format(Math.round(pv))+'</b></div>'
-          +'<div class="k-m mg"><span>Marge</span><b>'+EUR.format(Math.round(marge))+'</b></div>'
-          +'<div class="k-m"><span>Taux</span><b>'+taux.toFixed(1).replace('.',',')+' %</b></div>'
-        +'</div>'
-        +'<div class="k-foot">👥 '+((e.users||[]).map(escapeHtml).join(', ')||'—')+' · dernière activité '+lastTxt+'</div>'
-        +'</div>';
+      return '<div class="k-card"><div class="k-card-h"><span class="k-name">🏢 '+escapeHtml(e.name||id)+'</span>'+(canOpen?'<button class="k-open" onclick="kaomaOpen(\''+id+'\')">Ouvrir →</button>':'')+'</div>'
+        +'<div class="k-metrics"><div class="k-m"><span>Chiffrages</span><b>'+ds.length+'</b></div><div class="k-m"><span>CA chiffré</span><b>'+EUR.format(Math.round(pv))+'</b></div><div class="k-m mg"><span>Marge</span><b>'+EUR.format(Math.round(marge))+'</b></div><div class="k-m"><span>Taux</span><b>'+taux.toFixed(1).replace('.',',')+' %</b></div></div>'
+        +'<div class="k-foot">👥 '+((e.users||[]).map(escapeHtml).join(', ')||'—')+' · dernière activité '+lastTxt+'</div></div>';
     }).join('');
+    const now=Date.now();
+    const act7=users.filter(u=>u.lastLogin&&now-new Date(u.lastLogin).getTime()<7*864e5).length;
+    const today=new Date().toISOString().slice(0,10);
+    const connToday=events.filter(e=>e.type==='login'&&String(e.ts||'').slice(0,10)===today).length;
     const totTaux=TPV>0?TM/TPV*100:0;
-    body.innerHTML='<div class="k-total">'
-        +'<div><span>Sociétés</span><b>'+ids.length+'</b></div>'
-        +'<div><span>Chiffrages</span><b>'+TC+'</b></div>'
-        +'<div><span>CA chiffré total</span><b>'+EUR.format(Math.round(TPV))+'</b></div>'
-        +'<div class="mg"><span>Marge totale</span><b>'+EUR.format(Math.round(TM))+' · '+totTaux.toFixed(1).replace('.',',')+'%</b></div>'
+    body.innerHTML=
+      '<div class="k-total">'
+       +'<div><span>Sociétés</span><b>'+ids.length+'</b></div>'
+       +'<div><span>Utilisateurs</span><b>'+users.length+'</b></div>'
+       +'<div><span>Actifs 7j</span><b>'+act7+'</b></div>'
+       +'<div><span>Connexions auj.</span><b>'+connToday+'</b></div>'
+       +'<div><span>CA chiffré total</span><b>'+EUR.format(Math.round(TPV))+'</b></div>'
+       +'<div class="mg"><span>Marge totale</span><b>'+EUR.format(Math.round(TM))+' · '+totTaux.toFixed(1).replace('.',',')+'%</b></div>'
       +'</div>'
-      +'<div class="k-grid">'+cards+'</div>'
-      +'<div class="k-import">📥 Importer des dossiers (JSON) dans <b>Blomkål</b> : <input type="file" id="impFile" accept="application/json,.json"> <button class="k-open" onclick="importSeed(\'blomkal\')">Importer</button></div>';
+      +'<div class="k-sec">Sociétés</div><div class="k-grid">'+cards+'</div>'
+      +'<div class="k-sec">Utilisateurs · '+users.length+'</div>'+renderUsers(users,NM)
+      +'<div class="k-sec">Connexions &amp; activité récentes</div>'+renderEvents(events,NM)
+      +'<div class="k-import">📥 Importer (JSON) dans <b>Blomkål</b> : <input type="file" id="impFile" accept="application/json,.json"> <button class="k-open" onclick="importSeed(\'blomkal\')">Importer</button> &nbsp;·&nbsp; <button class="k-open" style="background:#0f3b30" onclick="kaomaExport()">⬇︎ Exporter la sauvegarde complète</button></div>';
   }catch(e){ body.innerHTML='<div class="k-err">Erreur de chargement.</div>'; }
+}
+function renderUsers(users,NM){
+  if(!users.length) return '<div class="k-empty">Aucun utilisateur enregistré encore (dès qu\'ils se connectent, ils apparaissent ici).</div>';
+  const rows=users.map(u=>{
+    const esp=(u.espaces||[]).map(e=>NM[e]||e).join(', ')||'—';
+    const last=u.lastLogin?new Date(u.lastLogin).toLocaleString('fr-FR'):'—';
+    return '<tr><td>'+escapeHtml(u.email||'')+'</td><td>'+escapeHtml(esp)+'</td><td>'+escapeHtml(last)+'</td><td style="text-align:center">'+(u.logins||0)+'</td><td style="text-align:center">'+escapeHtml(u.pays||'')+'</td></tr>';
+  }).join('');
+  return '<div class="k-tw"><table class="k-table"><thead><tr><th>Email</th><th>Société(s)</th><th>Dernière connexion</th><th>Conn.</th><th>Pays</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+function renderEvents(events,NM){
+  if(!events.length) return '<div class="k-empty">Aucune activité encore.</div>';
+  const L={login:'🔑 Connexion',dossier_save:'💾 Dossier',dossier_delete:'🗑 Suppression',import:'📥 Import'};
+  const rows=events.slice(0,40).map(e=>{
+    const when=e.ts?new Date(e.ts).toLocaleString('fr-FR'):''; const m=e.meta||{}; let d='';
+    if(e.type==='login') d=m.pays?('· '+escapeHtml(m.pays)):'';
+    else if(e.type==='dossier_save') d='· '+escapeHtml(m.name||m.id||'')+(m.espace?(' ('+escapeHtml(NM[m.espace]||m.espace)+')'):'');
+    else if(e.type==='import') d='· '+escapeHtml(String(m.n||'?'))+' dossiers → '+escapeHtml(NM[m.espace]||m.espace||'');
+    else if(e.type==='dossier_delete') d='· '+escapeHtml(NM[m.espace]||m.espace||'');
+    return '<div class="k-ev"><span class="k-ev-t">'+(L[e.type]||escapeHtml(e.type))+'</span><span class="k-ev-u">'+escapeHtml(e.email||'')+'</span><span class="k-ev-d">'+d+'</span><span class="k-ev-w">'+escapeHtml(when)+'</span></div>';
+  }).join('');
+  return '<div class="k-events">'+rows+'</div>';
+}
+function kaomaExport(){
+  try{ const data=window._kaomaData||{}; const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='kaoma-sauvegarde-'+new Date().toISOString().slice(0,10)+'.json'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),3000); toast('⬇︎ Sauvegarde complète exportée');
+  }catch(e){ toast('Export impossible'); }
 }
 function kaomaOpen(id){ kaomaClose(); if(AUTH.espaces.some(x=>x.id===id)) setEspace(id); }
 function kaomaClose(){ const o=$('kaomaOverlay'); if(o) o.style.display='none'; }

@@ -1,20 +1,33 @@
-// KAOMA Marge PRO — Worker unique (Cloudflare Pages, mode avancé _worker.js)
-// Sert le statique (index.html) via env.ASSETS et gère l'API /api/dossiers.
-// Multi-société : login Google (Bearer ID token) + espaces cloisonnés "dossier:<espace>:<id>".
+// KAOMA Marge PRO — Worker (Cloudflare Pages, _worker.js)
+// Sert le statique + API /api/dossiers. Multi-société (login Google + espaces cloisonnés).
+// Socle plateforme : journal d'événements + suivi utilisateurs (cockpit KAOMA).
 //
-// CONFIG SENSIBLE HORS CODE (le dépôt peut être public) — variables d'environnement Cloudflare :
-//   GOOGLE_CLIENT_ID = ...apps.googleusercontent.com   (public, mais paramétrable)
-//   SUPER_ADMIN      = user1@exemple.fr
-//   ACL_JSON         = {"user1@exemple.fr":["blomkal","woox"], "user2@exemple.fr":["blomkal"], ...}
-// Sans ACL_JSON -> personne n'a accès (fail-closed).
+// CONFIG (variables d'env Cloudflare, hors code) : GOOGLE_CLIENT_ID, SUPER_ADMIN, ACL_JSON.
+//
+// RÈGLE ANTI-RÉÉCRITURE (croissance sans tout refaire) : TOUT l'accès données passe par `store`
+// (get/put/list/del). Pour passer de KV à une vraie base (D1/Postgres/par-pays) : ne réécrire QUE `store`.
 
 const DEFAULT_CLIENT_ID = '897490379532-ta39a6sla6c03ur1ben03jpv6aqjrb7a.apps.googleusercontent.com';
 const ESPACES = { blomkal: { name: 'Blomkål' }, woox: { name: 'WOOX' } };
 const HIST_MAX = 40;
-const HIST_TTL = 60 * 60 * 24 * 120;
+const HIST_TTL = 60 * 60 * 24 * 120;   // 120 j (historique dossiers)
+const EVT_TTL  = 60 * 60 * 24 * 180;   // 180 j (événements)
+const LOGIN_THROTTLE = 30 * 60 * 1000; // 30 min entre 2 connexions comptées
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+
+// ---- Couche données découplée (le seul endroit à changer pour migrer KV -> vraie base) ----
+function makeStore(env) {
+  const kv = env && env.DOSSIERS;
+  return {
+    ok: !!kv,
+    get: (k) => kv.get(k),
+    put: (k, v, opt) => kv.put(k, v, opt),
+    del: (k) => kv.delete(k),
+    list: (prefix, limit) => kv.list({ prefix, limit: limit || 1000 }),
+  };
+}
 
 function config(env) {
   let acl = {};
@@ -29,6 +42,7 @@ function config(env) {
 const espaceOk = (user, espace) => !!espace && user && user.espaces.indexOf(espace) >= 0;
 const dkey = (espace, id) => 'dossier:' + espace + ':' + id;
 const hpref = (espace, id) => 'hist:' + espace + ':' + id + ':';
+const clientMeta = (request) => ({ ip: request.headers.get('CF-Connecting-IP') || '', ua: (request.headers.get('User-Agent') || '').slice(0, 140), pays: (request.cf && request.cf.country) || '' });
 
 async function getUser(request, env) {
   const h = request.headers.get('Authorization') || '';
@@ -48,51 +62,91 @@ async function getUser(request, env) {
   } catch (e) { return null; }
 }
 
+// ---- Socle événements (append-only, format portable -> exportable PostHog/entrepôt) ----
+async function logEvent(store, type, email, meta) {
+  if (!store.ok) return;
+  const ts = new Date().toISOString();
+  const key = 'event:' + ts + ':' + Math.random().toString(36).slice(2, 8);
+  try { await store.put(key, JSON.stringify({ ts, type, email: email || '', meta: meta || {} }), { expirationTtl: EVT_TTL }); } catch (e) {}
+}
+// Marque l'utilisateur ; si nouvelle connexion (throttle 30 min) -> +1 login et event 'login'
+async function touchUser(store, email, espaces, meta) {
+  if (!store.ok || !email) return;
+  let u = null;
+  try { const raw = await store.get('user:' + email); if (raw) u = JSON.parse(raw); } catch (e) {}
+  const now = Date.now();
+  const isNew = !u || !u.lastLogin || (now - new Date(u.lastLogin).getTime() > LOGIN_THROTTLE);
+  u = u || { email: email, firstSeen: new Date().toISOString(), logins: 0 };
+  if (isNew) u.logins = (u.logins || 0) + 1;
+  u.lastLogin = new Date().toISOString();
+  u.espaces = espaces || u.espaces || [];
+  if (meta && meta.pays) u.pays = meta.pays;
+  try { await store.put('user:' + email, JSON.stringify(u)); } catch (e) {}
+  if (isNew) await logEvent(store, 'login', email, meta);
+}
+
 async function handleGet(request, env, url) {
+  const store = makeStore(env);
   const user = await getUser(request, env);
   if (!user) return json({ error: 'non authentifié' }, 401);
-  if (url.searchParams.get('me')) return json({ email: user.email, espaces: user.espaces.map((e) => ({ id: e, name: (ESPACES[e] && ESPACES[e].name) || e })), isAdmin: user.isAdmin });
-  const adminParam = url.searchParams.get('admin');
-  if (adminParam === 'data') {
-    if (!user.isAdmin) return json({ error: 'réservé admin' }, 403);
-    if (!env.DOSSIERS) return json({}, 200);
-    const out = {};
-    for (const e of Object.keys(ESPACES)) {
-      const list = await env.DOSSIERS.list({ prefix: 'dossier:' + e + ':' });
-      const items = await Promise.all(list.keys.map(async (k) => { const v = await env.DOSSIERS.get(k.name); try { return JSON.parse(v); } catch { return null; } }));
-      out[e] = { name: ESPACES[e].name, users: Object.keys(user.cfg.acl).filter((m) => user.cfg.acl[m].indexOf(e) >= 0), dossiers: items.filter(Boolean) };
-    }
-    return json(out);
+
+  if (url.searchParams.get('me')) {
+    await touchUser(store, user.email, user.espaces, clientMeta(request));
+    return json({ email: user.email, espaces: user.espaces.map((e) => ({ id: e, name: (ESPACES[e] && ESPACES[e].name) || e })), isAdmin: user.isAdmin });
   }
+
+  const adminParam = url.searchParams.get('admin');
   if (adminParam) {
     if (!user.isAdmin) return json({ error: 'réservé admin' }, 403);
-    if (!env.DOSSIERS) return json([], 200);
+    if (!store.ok) return json(adminParam === 'data' ? {} : [], 200);
+    if (adminParam === 'users') {
+      const l = await store.list('user:');
+      const users = await Promise.all(l.keys.map(async (k) => { const v = await store.get(k.name); try { return JSON.parse(v); } catch { return null; } }));
+      return json(users.filter(Boolean).sort((a, b) => String(b.lastLogin || '').localeCompare(String(a.lastLogin || ''))));
+    }
+    if (adminParam === 'events') {
+      const l = await store.list('event:', 1000);
+      const names = l.keys.map((k) => k.name).sort().reverse().slice(0, 120);
+      const evs = await Promise.all(names.map(async (n) => { const v = await store.get(n); try { return JSON.parse(v); } catch { return null; } }));
+      return json(evs.filter(Boolean));
+    }
+    if (adminParam === 'data') {
+      const out = {};
+      for (const e of Object.keys(ESPACES)) {
+        const list = await store.list('dossier:' + e + ':');
+        const items = await Promise.all(list.keys.map(async (k) => { const v = await store.get(k.name); try { return JSON.parse(v); } catch { return null; } }));
+        out[e] = { name: ESPACES[e].name, users: Object.keys(user.cfg.acl).filter((mm) => user.cfg.acl[mm].indexOf(e) >= 0), dossiers: items.filter(Boolean) };
+      }
+      return json(out);
+    }
     const out = [];
     for (const e of Object.keys(ESPACES)) {
-      const list = await env.DOSSIERS.list({ prefix: 'dossier:' + e + ':' });
-      out.push({ espace: e, name: ESPACES[e].name, dossiers: list.keys.length, users: Object.keys(user.cfg.acl).filter((m) => user.cfg.acl[m].indexOf(e) >= 0) });
+      const list = await store.list('dossier:' + e + ':');
+      out.push({ espace: e, name: ESPACES[e].name, dossiers: list.keys.length, users: Object.keys(user.cfg.acl).filter((mm) => user.cfg.acl[mm].indexOf(e) >= 0) });
     }
     return json(out);
   }
+
   const espace = url.searchParams.get('espace');
   if (!espaceOk(user, espace)) return json({ error: 'accès refusé à cet espace' }, 403);
-  if (!env.DOSSIERS) return json([], 200);
+  if (!store.ok) return json([], 200);
   const histId = url.searchParams.get('history');
   if (histId) {
-    const list = await env.DOSSIERS.list({ prefix: hpref(espace, histId) });
-    const items = await Promise.all(list.keys.map(async (k) => { const v = await env.DOSSIERS.get(k.name); try { return { _key: k.name, ...JSON.parse(v) }; } catch { return null; } }));
+    const list = await store.list(hpref(espace, histId));
+    const items = await Promise.all(list.keys.map(async (k) => { const v = await store.get(k.name); try { return { _key: k.name, ...JSON.parse(v) }; } catch { return null; } }));
     items.sort((a, b) => String((b && b.updated) || '').localeCompare(String((a && a.updated) || '')));
     return json(items.filter(Boolean));
   }
-  const list = await env.DOSSIERS.list({ prefix: 'dossier:' + espace + ':' });
-  const items = await Promise.all(list.keys.map(async (k) => { const v = await env.DOSSIERS.get(k.name); try { return JSON.parse(v); } catch { return null; } }));
+  const list = await store.list('dossier:' + espace + ':');
+  const items = await Promise.all(list.keys.map(async (k) => { const v = await store.get(k.name); try { return JSON.parse(v); } catch { return null; } }));
   return json(items.filter(Boolean));
 }
 
 async function handlePost(request, env, url) {
+  const store = makeStore(env);
   const user = await getUser(request, env);
   if (!user) return json({ error: 'non authentifié' }, 401);
-  if (!env.DOSSIERS) return json({ error: 'KV non configuré' }, 503);
+  if (!store.ok) return json({ error: 'KV non configuré' }, 503);
   const importEsp = url.searchParams.get('import');
   if (importEsp) {
     if (!user.isAdmin) return json({ error: 'réservé admin' }, 403);
@@ -100,7 +154,8 @@ async function handlePost(request, env, url) {
     let arr; try { arr = await request.json(); } catch { return json({ error: 'JSON invalide' }, 400); }
     if (!Array.isArray(arr)) return json({ error: 'tableau attendu' }, 400);
     let n = 0;
-    for (const d of arr) { if (d && d.id) { d.updated = d.updated || new Date().toISOString(); delete d.espace; await env.DOSSIERS.put(dkey(importEsp, d.id), JSON.stringify(d)); n++; } }
+    for (const d of arr) { if (d && d.id) { d.updated = d.updated || new Date().toISOString(); delete d.espace; await store.put(dkey(importEsp, d.id), JSON.stringify(d)); n++; } }
+    await logEvent(store, 'import', user.email, { espace: importEsp, n: n });
     return json({ ok: true, imported: n, espace: importEsp });
   }
   const espace = url.searchParams.get('espace');
@@ -110,33 +165,36 @@ async function handlePost(request, env, url) {
   const baseUpdated = d.baseUpdated; const force = d.force === true;
   delete d.baseUpdated; delete d.force; delete d.espace;
   const k = dkey(espace, d.id);
-  let prevRaw = null; try { prevRaw = await env.DOSSIERS.get(k); } catch {}
+  let prevRaw = null; try { prevRaw = await store.get(k); } catch {}
   if (prevRaw) {
     let prev = null; try { prev = JSON.parse(prevRaw); } catch {}
     if (prev && !force && baseUpdated && prev.updated && String(prev.updated) > String(baseUpdated)) return json({ conflict: true, current: prev }, 409);
     try {
       const ts = (prev && prev.updated) || new Date().toISOString();
-      await env.DOSSIERS.put(hpref(espace, d.id) + ts, prevRaw, { expirationTtl: HIST_TTL });
-      const hl = await env.DOSSIERS.list({ prefix: hpref(espace, d.id) });
-      if (hl.keys.length > HIST_MAX) { const olders = hl.keys.map((x) => x.name).sort().slice(0, hl.keys.length - HIST_MAX); for (const name of olders) { try { await env.DOSSIERS.delete(name); } catch {} } }
+      await store.put(hpref(espace, d.id) + ts, prevRaw, { expirationTtl: HIST_TTL });
+      const hl = await store.list(hpref(espace, d.id));
+      if (hl.keys.length > HIST_MAX) { const olders = hl.keys.map((x) => x.name).sort().slice(0, hl.keys.length - HIST_MAX); for (const name of olders) { try { await store.del(name); } catch {} } }
     } catch {}
   }
   d.updated = new Date().toISOString();
-  await env.DOSSIERS.put(k, JSON.stringify(d));
+  await store.put(k, JSON.stringify(d));
+  await logEvent(store, 'dossier_save', user.email, { espace: espace, id: d.id, name: (d.name || '').slice(0, 60) });
   return json({ ok: true, id: d.id, updated: d.updated });
 }
 
 async function handleDelete(request, env, url) {
+  const store = makeStore(env);
   const user = await getUser(request, env);
   if (!user) return json({ error: 'non authentifié' }, 401);
-  if (!env.DOSSIERS) return json({ error: 'KV non configuré' }, 503);
+  if (!store.ok) return json({ error: 'KV non configuré' }, 503);
   const espace = url.searchParams.get('espace');
   if (!espaceOk(user, espace)) return json({ error: 'accès refusé à cet espace' }, 403);
   const id = url.searchParams.get('id');
   if (!id) return json({ error: 'id manquant' }, 400);
   const k = dkey(espace, id);
-  try { const prevRaw = await env.DOSSIERS.get(k); if (prevRaw) await env.DOSSIERS.put(hpref(espace, id) + 'deleted:' + new Date().toISOString(), prevRaw, { expirationTtl: HIST_TTL }); } catch {}
-  await env.DOSSIERS.delete(k);
+  try { const prevRaw = await store.get(k); if (prevRaw) await store.put(hpref(espace, id) + 'deleted:' + new Date().toISOString(), prevRaw, { expirationTtl: HIST_TTL }); } catch {}
+  await store.del(k);
+  await logEvent(store, 'dossier_delete', user.email, { espace: espace, id: id });
   return json({ ok: true });
 }
 
