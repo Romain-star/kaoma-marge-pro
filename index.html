@@ -147,6 +147,12 @@
   .saved-item .m{font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;margin-top:6px}
   .saved-item .pill{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:#e3efe3;color:var(--sage-deep)}
   .saved-empty{color:var(--muted);font-size:13px;padding:8px 0}
+  .saved-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+  .saved-search{flex:1;min-width:180px;border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13.5px;font-family:inherit;background:#fff;color:var(--text)}
+  .saved-search:focus{outline:none;border-color:var(--sage)}
+  .saved-sort{border:1px solid var(--line);border-radius:9px;padding:9px 10px;font-size:13px;font-family:inherit;background:#fff;color:var(--text);cursor:pointer}
+  .saved-sort:focus{outline:none;border-color:var(--sage)}
+  .saved-count{font-size:11.5px;color:var(--muted);font-weight:600;white-space:nowrap;margin-left:auto}
 
   .status{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--graphite);color:var(--paper);padding:11px 20px;border-radius:30px;font-size:13.5px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.25);transition:.25s;z-index:50}
   .status.show{transform:translateX(-50%) translateY(0)}
@@ -206,7 +212,7 @@
   .line-row td, tr.grp th, thead tr:nth-child(2) th{white-space:nowrap}
   .lin{width:52px;text-align:right;border:1px solid var(--line);border-radius:7px;padding:6px 6px;font-size:12.5px;font-family:'Inter Tight';font-weight:700;background:#fff}
   .lin:focus{outline:none;border-color:var(--sage)}
-  .lin.pu{width:74px}
+  .lin.pu{width:92px;min-width:92px}
   .mgtoggle{font-size:11px;font-weight:700;border:1px solid var(--line);background:#faf7f3;border-radius:6px;padding:6px 6px;cursor:pointer;color:var(--sage-deep);min-width:24px}
   .mgtoggle:hover{border-color:var(--sage)}
   .lcell{font-family:'Inter Tight';font-weight:700;font-size:13px;white-space:nowrap;text-align:right}
@@ -691,6 +697,17 @@
     <div id="recoverBanner" style="display:none"></div>
     <h2>🗂️ Dossiers enregistrés <span class="eyebrow" id="savedScope">(base partagée)</span></h2>
     <div class="hint">Visibles par toute l'équipe — Romain, Loanah, Emeric… Clique pour rouvrir un dossier.</div>
+    <div class="saved-tools">
+      <input id="savedSearch" class="saved-search" type="search" placeholder="🔍 Rechercher un dossier (nom ou code)…" oninput="renderSaved()" autocomplete="off">
+      <select id="savedSort" class="saved-sort" onchange="renderSaved()" aria-label="Trier les dossiers">
+        <option value="recent">↧ Plus récent</option>
+        <option value="old">↥ Plus ancien</option>
+        <option value="name">Nom A→Z</option>
+        <option value="pv">PV décroissant</option>
+        <option value="marge">Marge % décroissante</option>
+      </select>
+      <span id="savedCount" class="saved-count"></span>
+    </div>
     <div class="saved-list" id="savedList"></div>
   </div>
 </div>
@@ -1190,12 +1207,8 @@ async function loadList(){
   let arr=[];
   if(API_OK){ try{ const r=await apiFetch('',{method:'GET'}); if(r.status===401){ authRelogin(); return; } arr=await r.json(); if(!Array.isArray(arr)) arr=localGet(); }catch(e){ arr=localGet(); } }
   else arr=localGet();
-  arr.sort((a,b)=>(b.updated||'').localeCompare(a.updated||''));
-  const el=$('savedList');
-  if(!arr.length){ el.innerHTML='<div class="saved-empty">Aucun dossier enregistré pour le moment.</div>'; return; }
-  el.innerHTML='';
-  arr.forEach(d=>{
-    // Coût + PV par lignes (fourniture + pose), sinon logique globale (ancien format)
+  // Précalcul par dossier (coût D, PV, taux) — logique de calcul inchangée
+  window._saved = arr.map(d=>{
     let cost=0, pvArt=0, hasPerLine=false;
     (d.lines||[]).forEach(l=>{
       if(l.qty!=null||l.marginMode){ hasPerLine=true; const r=computeLine(l); cost+=r.cost; pvArt+=r.pv; }
@@ -1207,19 +1220,43 @@ async function loadList(){
     moArr.forEach(l=>{ const c=parseNum(l.cout)*parseNum(l.hours); moC+=c;
       let v; if(mm==='marge'){const m=parseNum(l.marge)/100; v=m<1?parseNum(l.cout)/(1-m):0;} else {v=parseNum(l.vente);} moPV+=v*parseNum(l.hours); });
     const D=cost+moC;
-    let pv=0,marge=0,taux=0;
-    if(hasPerLine){ pv=pvArt+moPV; marge=pv-D; taux=pv>0?marge/pv:0; }
-    else if(d.mode==='A'){ const t=parseNum(d.targetA)/100; pv=t<1?D/(1-t):0; marge=pv-D; taux=t; }
-    else { pv=parseNum(d.pvB); marge=pv-D; taux=pv>0?marge/pv:0; }
+    let pv=0,taux=0;
+    if(hasPerLine){ pv=pvArt+moPV; taux=pv>0?(pv-D)/pv:0; }
+    else if(d.mode==='A'){ const t=parseNum(d.targetA)/100; pv=t<1?D/(1-t):0; taux=t; }
+    else { pv=parseNum(d.pvB); taux=pv>0?(pv-D)/pv:0; }
+    return { d, name:(d.name||'Sans nom'), updated:(d.updated||''), pv, D, taux };
+  });
+  renderSaved();
+  recoverScan(API_OK?arr:null);
+}
+function renderSaved(){
+  const el=$('savedList'); if(!el) return;
+  const items = window._saved||[];
+  const q = ($('savedSearch')?$('savedSearch').value:'').trim().toLowerCase();
+  const sort = $('savedSort')?$('savedSort').value:'recent';
+  let list = items.filter(it=> !q || it.name.toLowerCase().includes(q) || String(it.d.id||'').toLowerCase().includes(q));
+  const cmp = {
+    recent:(a,b)=>String(b.updated).localeCompare(String(a.updated)),
+    old:(a,b)=>String(a.updated).localeCompare(String(b.updated)),
+    name:(a,b)=>a.name.localeCompare(b.name,'fr',{sensitivity:'base'}),
+    pv:(a,b)=>b.pv-a.pv,
+    marge:(a,b)=>b.taux-a.taux
+  }[sort] || ((a,b)=>String(b.updated).localeCompare(String(a.updated)));
+  list = list.slice().sort(cmp);
+  const cnt=$('savedCount'); if(cnt) cnt.textContent = items.length ? (list.length+'/'+items.length) : '';
+  if(!items.length){ el.innerHTML='<div class="saved-empty">Aucun dossier enregistré pour le moment.</div>'; return; }
+  if(!list.length){ el.innerHTML='<div class="saved-empty">Aucun dossier ne correspond à « '+escapeHtml(q)+' ».</div>'; return; }
+  el.innerHTML='';
+  list.forEach(it=>{
+    const d=it.d;
     const div=document.createElement('div'); div.className='saved-item';
-    div.innerHTML=`<div class="n">${escapeHtml(d.name)}</div>
-      <div class="m"><span>PV ${EUR.format(Math.round(pv))}</span><span class="pill">${(taux*100).toFixed(0)}% marge</span></div>
-      <div class="m"><span>Coût ${EUR.format(Math.round(D))}</span>
+    div.innerHTML=`<div class="n">${escapeHtml(it.name)}</div>
+      <div class="m"><span>PV ${EUR.format(Math.round(it.pv))}</span><span class="pill">${(it.taux*100).toFixed(0)}% marge</span></div>
+      <div class="m"><span>Coût ${EUR.format(Math.round(it.D))}</span>
         <button class="btn sm danger" onclick="event.stopPropagation();delDossier('${d.id}')">Suppr.</button></div>`;
     div.onclick=()=>openDossier(d);
     el.appendChild(div);
   });
-  recoverScan(API_OK?arr:null);
 }
 function openDossier(d){
   suppressAutosave=true;
