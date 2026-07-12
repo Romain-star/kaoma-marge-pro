@@ -10,7 +10,7 @@
 // Pour migrer KV -> vraie base (D1/Postgres/par-pays) : ne réécrire QUE `store`.
 
 const DEFAULT_CLIENT_ID = '897490379532-ta39a6sla6c03ur1ben03jpv6aqjrb7a.apps.googleusercontent.com';
-const ESPACES = { blomkal: { name: 'Blomkål' }, woox: { name: 'WOOX' } };
+const ESPACES = { blomkal: { name: 'Blomkål' }, woox: { name: 'WOOX' }, bf: { name: 'BF Agencement' } };
 const HIST_MAX = 40;
 const HIST_TTL = 60 * 60 * 24 * 120;   // 120 j (historique dossiers)
 const EVT_TTL  = 60 * 60 * 24 * 180;   // 180 j (événements)
